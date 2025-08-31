@@ -1,0 +1,13 @@
+{
+  "files": {
+    "main.css": "/ffmpeg-wasm-upscale/static/css/main.11bbabf1.css",
+    "main.js": "/ffmpeg-wasm-upscale/static/js/main.fe315a62.js",
+    "index.html": "/ffmpeg-wasm-upscale/index.html",
+    "main.11bbabf1.css.map": "/ffmpeg-wasm-upscale/static/css/main.11bbabf1.css.map",
+    "main.fe315a62.js.map": "/ffmpeg-wasm-upscale/static/js/main.fe315a62.js.map"
+  },
+  "entrypoints": [
+    "static/css/main.11bbabf1.css",
+    "static/js/main.fe315a62.js"
+  ]
+}

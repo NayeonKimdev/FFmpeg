@@ -46,6 +46,41 @@ fs.ensureDirSync(outputDir);
 // 정적 파일 서빙
 app.use('/outputs', express.static(outputDir));
 
+// 파일 정리 함수
+const cleanupOldFiles = async () => {
+  try {
+    // 업로드 폴더 정리 (1시간 이상 된 파일들)
+    const uploadDir = path.join(__dirname, 'uploads');
+    const uploadFiles = await fs.readdir(uploadDir);
+    const oldUploadFiles = uploadFiles.filter(file => 
+      file.startsWith('video-') && 
+      Date.now() - parseInt(file.split('-')[1]) > 60 * 60 * 1000 // 1시간 이상 된 파일
+    );
+    
+    for (const oldFile of oldUploadFiles) {
+      await fs.remove(path.join(uploadDir, oldFile));
+      console.log(`🗑️ 정기 정리 - 업로드 파일: ${oldFile}`);
+    }
+
+    // 출력 폴더 정리 (6시간 이상 된 파일들)
+    const outputFiles = await fs.readdir(outputDir);
+    const oldOutputFiles = outputFiles.filter(file => 
+      file.startsWith('processed-') && 
+      Date.now() - parseInt(file.split('-')[1]) > 6 * 60 * 60 * 1000 // 6시간 이상 된 파일
+    );
+    
+    for (const oldFile of oldOutputFiles) {
+      await fs.remove(path.join(outputDir, oldFile));
+      console.log(`🗑️ 정기 정리 - 출력 파일: ${oldFile}`);
+    }
+  } catch (error) {
+    console.warn('정기 파일 정리 실패:', error.message);
+  }
+};
+
+// 30분마다 파일 정리 실행
+setInterval(cleanupOldFiles, 30 * 60 * 1000);
+
 // 비디오 메타데이터 추출 함수 (강화된 버전)
 const extractVideoMetadata = (videoPath) => {
   return new Promise((resolve, reject) => {
@@ -484,9 +519,6 @@ app.post('/api/process-video', upload.single('video'), async (req, res) => {
         qualityImprovement: features.join(', ')
       }
     });
-
-    // 입력 파일 정리 (선택사항)
-    // await fs.remove(inputPath);
 
   } catch (error) {
     console.error('❌ 서버 오류:', error);

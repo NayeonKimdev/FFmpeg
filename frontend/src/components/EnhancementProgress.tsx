@@ -1,34 +1,32 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import {
   Box,
-  Paper,
   Typography,
   LinearProgress,
   Button,
   Alert,
+  Paper,
+  Grid,
   Chip,
-  Divider
+  CircularProgress
 } from '@mui/material';
-import { 
-  PlayArrow, 
-  Stop, 
-  CheckCircle, 
-  Error,
-  Schedule,
-  Info
-} from '@mui/icons-material';
-import { enhanceVideo, getEnhancementStatus, getMetadata } from '../services/api';
-
-interface EnhancementOptions {
-  resolution: string;
-  quality: string;
-  codec: string;
-}
+import { PlayArrow, Stop, CheckCircle, Error } from '@mui/icons-material';
+import { enhanceVideo, getEnhancementStatus } from '../services/api';
 
 interface EnhancementProgressProps {
   fileId: string;
-  onEnhancementComplete: (result: any) => void;
+  onEnhancementComplete: (file: any) => void;
   onCancel: () => void;
+}
+
+interface EnhancementStatus {
+  status: 'processing' | 'completed' | 'failed';
+  progress: number;
+  message: string;
+  error?: string;
+  file?: any;
+  estimatedTime?: string;
+  lastModified?: string;
 }
 
 const EnhancementProgress: React.FC<EnhancementProgressProps> = ({
@@ -36,71 +34,44 @@ const EnhancementProgress: React.FC<EnhancementProgressProps> = ({
   onEnhancementComplete,
   onCancel
 }) => {
-  const [status, setStatus] = useState<'processing' | 'completed' | 'error' | 'failed'>('processing');
+  const [status, setStatus] = useState<'idle' | 'processing' | 'completed' | 'failed' | 'error'>('idle');
   const [progress, setProgress] = useState(0);
-  const [message, setMessage] = useState('화질 개선을 시작합니다...');
+  const [message, setMessage] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [jobId, setJobId] = useState<string | null>(null);
-  const [enhancementOptions, setEnhancementOptions] = useState<EnhancementOptions>({
-    resolution: '1080p',
-    quality: 'high',
-    codec: 'h264'
-  });
-  const [originalMetadata, setOriginalMetadata] = useState<any>(null);
   const [estimatedTime, setEstimatedTime] = useState<string>('5-15분');
   const [lastModified, setLastModified] = useState<Date | null>(null);
+  const [pollingInterval, setPollingInterval] = useState(5000); // 초기 5초
+  const [isPolling, setIsPolling] = useState(false);
+  const intervalRef = useRef<NodeJS.Timeout | null>(null);
+  const mountedRef = useRef(true);
 
+  // 컴포넌트 언마운트 시 정리
   useEffect(() => {
-    startEnhancement();
-  }, [fileId]);
+    return () => {
+      mountedRef.current = false;
+      if (intervalRef.current) {
+        clearInterval(intervalRef.current);
+      }
+    };
+  }, []);
 
-  useEffect(() => {
-    loadOriginalMetadata();
-  }, [fileId]);
+  // 스마트 폴링 - 진행률에 따라 간격 조정
+  const getPollingInterval = useCallback((currentProgress: number) => {
+    if (currentProgress < 10) return 10000; // 10초 - 초기 단계
+    if (currentProgress < 50) return 8000;  // 8초 - 진행 중
+    if (currentProgress < 90) return 5000;  // 5초 - 거의 완료
+    return 3000; // 3초 - 최종 단계
+  }, []);
 
-  useEffect(() => {
-    if (status === 'processing' && jobId) {
-      const interval = setInterval(checkStatus, 3000); // 3초마다 확인
-      return () => clearInterval(interval);
-    }
-  }, [status, jobId]);
-
-  const startEnhancement = async () => {
-    try {
-      setMessage('화질 개선 요청을 보내는 중...');
-      setProgress(5);
-      
-      const result = await enhanceVideo(fileId, enhancementOptions);
-      setJobId(result.jobId);
-      setEstimatedTime(result.estimatedTime || '5-15분');
-      setMessage('화질 개선이 시작되었습니다. 처리 중...');
-      setProgress(15);
-      
-      console.log('화질 개선 시작:', result);
-      
-    } catch (err: any) {
-      console.error('화질 개선 시작 실패:', err);
-      setError(err?.error || err?.message || '화질 개선 시작 실패');
-      setStatus('error');
-    }
-  };
-
-  const loadOriginalMetadata = async () => {
-    try {
-      const metadataResult = await getMetadata(fileId, 'original');
-      setOriginalMetadata(metadataResult.metadata);
-      console.log('원본 메타데이터 로드 완료:', metadataResult.metadata);
-    } catch (err: any) {
-      console.error('원본 메타데이터 로드 실패:', err);
-      // 실패해도 계속 진행
-    }
-  };
-
-  const checkStatus = async () => {
-    if (!jobId) return;
+  // 상태 확인 함수 (디바운싱 적용)
+  const checkStatusDebounced = useCallback(async () => {
+    if (!jobId || !mountedRef.current) return;
 
     try {
       const statusResult = await getEnhancementStatus(jobId);
+      
+      if (!mountedRef.current) return; // 컴포넌트가 언마운트되면 중단
       
       console.log('상태 확인 결과:', statusResult);
       
@@ -108,20 +79,18 @@ const EnhancementProgress: React.FC<EnhancementProgressProps> = ({
         setStatus('completed');
         setProgress(100);
         setMessage('화질 개선이 완료되었습니다!');
+        setIsPolling(false);
         
-        // 완료된 파일 정보 로그
-        if (statusResult.file) {
-          console.log('완료된 파일:', statusResult.file);
+        // 폴링 중단
+        if (intervalRef.current) {
+          clearInterval(intervalRef.current);
+          intervalRef.current = null;
         }
         
-        // 메타데이터 정보 로그
-        if (statusResult.metadata) {
-          console.log('출력 메타데이터:', statusResult.metadata);
-        }
-        
-        // 2초 후 메타데이터 비교 화면으로 이동
         setTimeout(() => {
-          onEnhancementComplete(statusResult.file);
+          if (mountedRef.current) {
+            onEnhancementComplete(statusResult.file);
+          }
         }, 2000);
         
       } else if (statusResult.status === 'failed') {
@@ -129,195 +98,238 @@ const EnhancementProgress: React.FC<EnhancementProgressProps> = ({
         setProgress(0);
         setMessage(statusResult.message || '비디오 처리에 실패했습니다.');
         setError(statusResult.error || '알 수 없는 오류가 발생했습니다.');
+        setIsPolling(false);
         
-      } else {
-        // 서버에서 받은 실제 진행률 사용
-        if (statusResult.progress) {
-          setProgress(statusResult.progress);
-        } else {
-          // 서버에서 진행률을 제공하지 않으면 점진적으로 증가
-          setProgress(prev => {
-            if (prev >= 90) {
-              return 90; // 90%에서 대기
-            }
-            return Math.min(prev + 1, 90); // 1%씩 증가
-          });
+        if (intervalRef.current) {
+          clearInterval(intervalRef.current);
+          intervalRef.current = null;
         }
         
+      } else {
+        // 진행 중
+        const newProgress = statusResult.progress || progress;
+        setProgress(newProgress);
         setMessage(statusResult.message || '비디오를 처리하고 있습니다...');
         
-        // 마지막 수정 시간 업데이트
+        // 폴링 간격 조정
+        const newInterval = getPollingInterval(newProgress);
+        if (newInterval !== pollingInterval) {
+          setPollingInterval(newInterval);
+          
+          // 기존 인터벌 클리어하고 새로 설정
+          if (intervalRef.current) {
+            clearInterval(intervalRef.current);
+          }
+          startPolling(newInterval);
+        }
+        
         if (statusResult.lastModified) {
           setLastModified(new Date(statusResult.lastModified));
         }
       }
     } catch (err: any) {
       console.error('상태 확인 실패:', err);
+      
+      // 429 에러인 경우 폴링 간격 증가
+      if (err.response?.status === 429) {
+        console.log('Rate limit 도달, 폴링 간격 증가');
+        setPollingInterval(prev => Math.min(prev * 2, 30000)); // 최대 30초
+        setMessage('서버 부하로 인해 확인 간격을 늘렸습니다...');
+        return; // 에러 상태로 변경하지 않음
+      }
+      
+      // 네트워크 오류 등은 3회까지 재시도
+      const retryCount = (err as any).retryCount || 0;
+      if (retryCount < 3) {
+        setTimeout(() => {
+          const newErr = { ...err, retryCount: retryCount + 1 };
+          checkStatusDebounced();
+        }, 5000);
+        return;
+      }
+      
       setError(err?.error || err?.message || '상태 확인 실패');
       setStatus('error');
+      setIsPolling(false);
     }
-  };
+  }, [jobId, progress, pollingInterval, getPollingInterval, onEnhancementComplete]);
 
-  const handleCancel = async () => {
-    try {
-      if (jobId) {
-        // 서버에 취소 요청 보내기
-        // await cancelEnhancement(jobId);
-        console.log('작업 취소 요청:', jobId);
-      }
-      setMessage('작업이 취소되었습니다.');
-      onCancel();
-    } catch (err: any) {
-      console.error('작업 취소 실패:', err);
-      setError('작업 취소에 실패했습니다.');
+  // 폴링 시작 함수
+  const startPolling = useCallback((interval: number = pollingInterval) => {
+    if (intervalRef.current) {
+      clearInterval(intervalRef.current);
     }
+    
+    setIsPolling(true);
+    intervalRef.current = setInterval(() => {
+      checkStatusDebounced();
+    }, interval);
+  }, [checkStatusDebounced, pollingInterval]);
+
+  // 폴링 시작 (상태가 processing일 때만)
+  useEffect(() => {
+    if (status === 'processing' && jobId && !isPolling) {
+      startPolling();
+    }
+    
+    return () => {
+      if (intervalRef.current) {
+        clearInterval(intervalRef.current);
+        intervalRef.current = null;
+      }
+    };
+  }, [status, jobId, isPolling, startPolling]);
+
+  // 초기 enhancement 시작 (한 번만)
+  useEffect(() => {
+    let isInitialized = false;
+    
+    const initializeEnhancement = async () => {
+      if (isInitialized) return;
+      isInitialized = true;
+      
+      try {
+        setMessage('화질 개선 요청을 보내는 중...');
+        setProgress(5);
+        
+        const result = await enhanceVideo(fileId, {
+          resolution: '1080p',
+          quality: 'high'
+        });
+        
+        if (!mountedRef.current) return;
+        
+        setJobId(result.jobId);
+        setEstimatedTime(result.estimatedTime || '5-15분');
+        setMessage('화질 개선이 시작되었습니다. 처리 중...');
+        setProgress(15);
+        setStatus('processing');
+        
+        console.log('화질 개선 시작:', result);
+        
+        // 3초 후 첫 상태 확인
+        setTimeout(() => {
+          if (mountedRef.current) {
+            checkStatusDebounced();
+          }
+        }, 3000);
+        
+      } catch (err: any) {
+        console.error('화질 개선 시작 실패:', err);
+        if (mountedRef.current) {
+          setError(err?.error || err?.message || '화질 개선 시작 실패');
+          setStatus('error');
+        }
+      }
+    };
+    
+    initializeEnhancement();
+  }, [fileId]); // fileId만 의존성으로
+
+  const handleCancel = () => {
+    if (intervalRef.current) {
+      clearInterval(intervalRef.current);
+      intervalRef.current = null;
+    }
+    setIsPolling(false);
+    onCancel();
   };
 
   const getStatusColor = () => {
     switch (status) {
-      case 'completed':
-        return 'success';
-      case 'error':
-      case 'failed':
-        return 'error';
-      default:
-        return 'primary';
+      case 'completed': return 'success';
+      case 'failed': return 'error';
+      case 'error': return 'error';
+      default: return 'primary';
     }
   };
 
   const getStatusIcon = () => {
     switch (status) {
-      case 'completed':
-        return <CheckCircle />;
-      case 'error':
-      case 'failed':
-        return <Error />;
-      default:
-        return <Schedule />;
+      case 'completed': return <CheckCircle />;
+      case 'failed': 
+      case 'error': return <Error />;
+      case 'processing': return <CircularProgress size={20} />;
+      default: return <PlayArrow />;
     }
   };
 
-  const formatDuration = (duration: string) => {
-    const seconds = parseFloat(duration);
-    if (isNaN(seconds)) return '알 수 없음';
-    
-    const minutes = Math.floor(seconds / 60);
-    const remainingSeconds = Math.floor(seconds % 60);
-    return `${minutes}분 ${remainingSeconds}초`;
-  };
-
   return (
-    <Box sx={{ width: '100%', maxWidth: 600, mx: 'auto' }}>
-      <Paper sx={{ p: 3 }}>
-        <Box sx={{ display: 'flex', alignItems: 'center', mb: 2 }}>
-          {getStatusIcon()}
-          <Typography variant="h6" sx={{ ml: 1 }}>
-            화질 개선 진행 상황
+    <Paper elevation={3} sx={{ p: 3, mb: 3 }}>
+      <Box sx={{ display: 'flex', alignItems: 'center', mb: 2 }}>
+        {getStatusIcon()}
+        <Typography variant="h6" sx={{ ml: 1 }}>
+          화질 개선 진행 상황
+        </Typography>
+      </Box>
+
+      {error && (
+        <Alert severity="error" sx={{ mb: 2 }}>
+          {error}
+        </Alert>
+      )}
+
+      <Box sx={{ mb: 2 }}>
+        <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 1 }}>
+          <Typography variant="body2" color="text.secondary">
+            {message}
+          </Typography>
+          <Typography variant="body2" color="text.secondary">
+            {Math.round(progress)}%
           </Typography>
         </Box>
-
-        <Alert severity="info" sx={{ mb: 3 }}>
-          <Typography variant="body2">
-            <strong>현재 단계:</strong> 화질 개선 중입니다. 이 과정은 {estimatedTime} 정도 소요될 수 있습니다.
-          </Typography>
-        </Alert>
-
-        {/* 원본 파일 정보 */}
-        {originalMetadata && (
-          <Box sx={{ mb: 3, p: 2, bgcolor: 'grey.50', borderRadius: 1 }}>
-            <Typography variant="subtitle2" gutterBottom>
-              원본 파일 정보
-            </Typography>
-            <Box sx={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 1 }}>
-              <Box>
-                <Typography variant="body2" color="text.secondary">
-                  해상도: {originalMetadata.video?.resolution || '알 수 없음'}
-                </Typography>
-              </Box>
-              <Box>
-                <Typography variant="body2" color="text.secondary">
-                  FPS: {originalMetadata.video?.fps || '알 수 없음'}
-                </Typography>
-              </Box>
-              <Box>
-                <Typography variant="body2" color="text.secondary">
-                  코덱: {originalMetadata.video?.codec || '알 수 없음'}
-                </Typography>
-              </Box>
-              <Box>
-                <Typography variant="body2" color="text.secondary">
-                  오디오: {originalMetadata.audio ? `${originalMetadata.audio.codec} (${originalMetadata.audio.channels}ch)` : '없음'}
-                </Typography>
-              </Box>
-              {originalMetadata.format?.duration && (
-                <Box sx={{ gridColumn: '1 / -1' }}>
-                  <Typography variant="body2" color="text.secondary">
-                    길이: {formatDuration(originalMetadata.format.duration)}
-                  </Typography>
-                </Box>
-              )}
-            </Box>
-          </Box>
-        )}
-
-        <Divider sx={{ mb: 2 }} />
-
-        <Typography variant="body1" gutterBottom>
-          {message}
-        </Typography>
-
         <LinearProgress 
           variant="determinate" 
           value={progress} 
-          sx={{ mb: 2 }}
+          color={getStatusColor()}
+          sx={{ height: 8, borderRadius: 4 }}
+        />
+      </Box>
+
+      <Grid container spacing={2} sx={{ mb: 2 }}>
+        <Grid item xs={6}>
+          <Typography variant="body2" color="text.secondary">
+            예상 소요 시간
+          </Typography>
+          <Typography variant="body1">
+            {estimatedTime}
+          </Typography>
+        </Grid>
+        <Grid item xs={6}>
+          <Typography variant="body2" color="text.secondary">
+            마지막 업데이트
+          </Typography>
+          <Typography variant="body1">
+            {lastModified ? lastModified.toLocaleTimeString() : '대기 중...'}
+          </Typography>
+        </Grid>
+      </Grid>
+
+      <Box sx={{ display: 'flex', gap: 1 }}>
+        <Chip 
+          label={`폴링 간격: ${pollingInterval/1000}초`} 
+          size="small" 
+          variant="outlined"
+        />
+        <Chip 
+          label={`상태: ${status}`} 
+          size="small" 
           color={getStatusColor()}
         />
+      </Box>
 
-        <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
-          {progress}% 완료
-        </Typography>
-
-        {lastModified && (
-          <Typography variant="caption" color="text.secondary" display="block" sx={{ mb: 2 }}>
-            마지막 업데이트: {lastModified.toLocaleTimeString()}
-          </Typography>
-        )}
-
-        {status === 'processing' && (
-          <Button
-            variant="outlined"
-            color="error"
-            startIcon={<Stop />}
-            onClick={handleCancel}
-            sx={{ mr: 1 }}
-          >
-            취소
-          </Button>
-        )}
-
-        {status === 'completed' && (
-          <Chip 
-            label="완료" 
-            color="success" 
-            icon={<CheckCircle />}
-          />
-        )}
-
-        {status === 'failed' && (
-          <Alert severity="error" sx={{ mt: 2 }}>
-            <Typography variant="body2">
-              <strong>처리 실패:</strong> {error}
-            </Typography>
-          </Alert>
-        )}
-
-        {error && status !== 'failed' && (
-          <Alert severity="error" sx={{ mt: 2 }}>
-            {error}
-          </Alert>
-        )}
-      </Paper>
-    </Box>
+      {status === 'processing' && (
+        <Button
+          variant="outlined"
+          color="error"
+          startIcon={<Stop />}
+          onClick={handleCancel}
+          sx={{ mt: 2 }}
+        >
+          취소
+        </Button>
+      )}
+    </Paper>
   );
 };
 

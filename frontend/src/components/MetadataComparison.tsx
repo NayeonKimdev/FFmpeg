@@ -3,7 +3,6 @@ import {
   Box,
   Typography,
   Paper,
-  Grid,
   Button,
   Alert,
   CircularProgress,
@@ -225,51 +224,47 @@ const MetadataComparison: React.FC<MetadataComparisonProps> = ({ fileId }) => {
       </Typography>
 
       {/* 비디오 미리보기 */}
-      <Grid container spacing={3} sx={{ mb: 4 }}>
-        <Grid item xs={12} md={6}>
-          <Paper elevation={2} sx={{ p: 2 }}>
-            <Typography variant="h6" gutterBottom>
-              원본 비디오
-            </Typography>
-            <VideoPlayer
-              src={`/api/download/stream/${fileId}?type=original`}
-              type="original"
-              onError={handleVideoError}
-            />
-            <Button
-              variant="outlined"
-              startIcon={<Download />}
-              onClick={handleDownloadOriginal}
-              sx={{ mt: 2 }}
-              fullWidth
-            >
-              원본 다운로드
-            </Button>
-          </Paper>
-        </Grid>
+      <Box sx={{ display: 'flex', flexDirection: { xs: 'column', md: 'row' }, gap: 3, mb: 4 }}>
+        <Paper elevation={2} sx={{ p: 2, flex: 1 }}>
+          <Typography variant="h6" gutterBottom>
+            원본 비디오
+          </Typography>
+          <VideoPlayer
+            src={`/api/download/stream/${fileId}?type=original`}
+            type="original"
+            onError={handleVideoError}
+          />
+          <Button
+            variant="outlined"
+            startIcon={<Download />}
+            onClick={handleDownloadOriginal}
+            sx={{ mt: 2 }}
+            fullWidth
+          >
+            원본 다운로드
+          </Button>
+        </Paper>
 
-        <Grid item xs={12} md={6}>
-          <Paper elevation={2} sx={{ p: 2 }}>
-            <Typography variant="h6" gutterBottom>
-              개선된 비디오
-            </Typography>
-            <VideoPlayer
-              src={`/api/download/stream/${fileId}?type=enhanced`}
-              type="enhanced"
-              onError={handleVideoError}
-            />
-            <Button
-              variant="outlined"
-              startIcon={<Download />}
-              onClick={handleDownloadEnhanced}
-              sx={{ mt: 2 }}
-              fullWidth
-            >
-              개선된 비디오 다운로드
-            </Button>
-          </Paper>
-        </Grid>
-      </Grid>
+        <Paper elevation={2} sx={{ p: 2, flex: 1 }}>
+          <Typography variant="h6" gutterBottom>
+            개선된 비디오
+          </Typography>
+          <VideoPlayer
+            src={`/api/download/stream/${fileId}?type=enhanced`}
+            type="enhanced"
+            onError={handleVideoError}
+          />
+          <Button
+            variant="outlined"
+            startIcon={<Download />}
+            onClick={handleDownloadEnhanced}
+            sx={{ mt: 2 }}
+            fullWidth
+          >
+            개선된 비디오 다운로드
+          </Button>
+        </Paper>
+      </Box>
 
       {/* 메타데이터 비교 테이블 */}
       <Paper elevation={2} sx={{ p: 3, mb: 3 }}>
@@ -277,56 +272,56 @@ const MetadataComparison: React.FC<MetadataComparisonProps> = ({ fileId }) => {
           메타데이터 비교
         </Typography>
         
-        <Grid container spacing={2}>
-          <Grid item xs={12} md={3}>
+        <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 2 }}>
+          <Box sx={{ flex: 1 }}>
             <Typography variant="subtitle2" color="text.secondary">
               파일 크기
             </Typography>
             <Typography variant="body1">
               {comparison.comparison.fileSizeChange}
             </Typography>
-          </Grid>
-          <Grid item xs={12} md={3}>
+          </Box>
+          <Box sx={{ flex: 1 }}>
             <Typography variant="subtitle2" color="text.secondary">
               해상도
             </Typography>
             <Typography variant="body1">
               {comparison.comparison.resolutionChange}
             </Typography>
-          </Grid>
-          <Grid item xs={12} md={3}>
+          </Box>
+          <Box sx={{ flex: 1 }}>
             <Typography variant="subtitle2" color="text.secondary">
               비트레이트
             </Typography>
             <Typography variant="body1">
               {comparison.comparison.bitrateChange}
             </Typography>
-          </Grid>
-          <Grid item xs={12} md={3}>
+          </Box>
+          <Box sx={{ flex: 1 }}>
             <Typography variant="subtitle2" color="text.secondary">
               FPS
             </Typography>
             <Typography variant="body1">
               {comparison.comparison.fpsChange}
             </Typography>
-          </Grid>
-          <Grid item xs={12} md={6}>
+          </Box>
+          <Box sx={{ flex: 1 }}>
             <Typography variant="subtitle2" color="text.secondary">
               코덱
             </Typography>
             <Typography variant="body1">
               {comparison.comparison.codecChange}
             </Typography>
-          </Grid>
-          <Grid item xs={12} md={6}>
+          </Box>
+          <Box sx={{ flex: 1 }}>
             <Typography variant="subtitle2" color="text.secondary">
               재생 시간
             </Typography>
             <Typography variant="body1">
               {comparison.comparison.durationChange}
             </Typography>
-          </Grid>
-        </Grid>
+          </Box>
+        </Box>
       </Paper>
 
       {/* 상세 분석 */}

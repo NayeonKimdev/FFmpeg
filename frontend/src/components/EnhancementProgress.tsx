@@ -6,7 +6,6 @@ import {
   Button,
   Alert,
   Paper,
-  Grid,
   Chip,
   CircularProgress
 } from '@mui/material';
@@ -285,25 +284,6 @@ const EnhancementProgress: React.FC<EnhancementProgressProps> = ({
           sx={{ height: 8, borderRadius: 4 }}
         />
       </Box>
-
-      <Grid container spacing={2} sx={{ mb: 2 }}>
-        <Grid item xs={6}>
-          <Typography variant="body2" color="text.secondary">
-            예상 소요 시간
-          </Typography>
-          <Typography variant="body1">
-            {estimatedTime}
-          </Typography>
-        </Grid>
-        <Grid item xs={6}>
-          <Typography variant="body2" color="text.secondary">
-            마지막 업데이트
-          </Typography>
-          <Typography variant="body1">
-            {lastModified ? lastModified.toLocaleTimeString() : '대기 중...'}
-          </Typography>
-        </Grid>
-      </Grid>
 
       <Box sx={{ display: 'flex', gap: 1 }}>
         <Chip 

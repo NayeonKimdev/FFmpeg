@@ -240,52 +240,22 @@ export interface VideoAnalysis {
 }
 
 export interface ComparisonData {
-  comparison: {
-    original: {
-      metadata: Metadata;
-      analysis: VideoAnalysis;
-      fileInfo: any;
-    } | null;
-    enhanced: {
-      metadata: Metadata;
-      analysis: VideoAnalysis;
-      fileInfo: any;
-    } | null;
+  original: {
+    metadata: Metadata;
+    fileInfo: any;
   };
-  improvements: {
-    fileSize: {
-      original: number;
-      enhanced: number;
-      change: number;
-      percentage: string;
-    };
-    resolution: {
-      original: string;
-      enhanced: string;
-      improved: boolean;
-    };
-    fps: {
-      original: number;
-      enhanced: number;
-      improved: boolean;
-    };
-    bitrate: {
-      original: string;
-      enhanced: string;
-    };
-    audio: {
-      original: string;
-      enhanced: string;
-      improved: boolean;
-    };
-    syncIssues: {
-      original: { hasSyncProblem: boolean };
-      enhanced: { hasSyncProblem: boolean };
-      improved: boolean;
-    };
-  } | null;
-  hasEnhanced: boolean;
-  comparedAt?: string;
+  enhanced: {
+    metadata: Metadata;
+    fileInfo: any;
+  };
+  comparison: {
+    fileSizeChange: string;
+    resolutionChange: string;
+    bitrateChange: string;
+    fpsChange: string;
+    codecChange: string;
+    durationChange: string;
+  };
 }
 
 export interface DownloadableFile {

@@ -1,116 +1,205 @@
-# FFmpeg 체험관 🎬
+# 비디오 화질 개선 애플리케이션
 
-무료로 비디오 화질을 극대화하는 웹 애플리케이션입니다!
+FFmpeg을 사용하여 비디오 화질을 개선하는 웹 애플리케이션입니다.
 
-## 🚀 주요 기능
+## 주요 기능
 
-- **AI 업스케일링**: 해상도 2배 향상
-- **화질 개선 마법**: 노이즈 제거 + 샤프닝
-- **극강 압축**: 용량 70% 감소, 화질 유지
-- **영화급 색감**: 할리우드 스타일 색보정
-- **손떨림 보정**: 짐벌 효과로 안정화
-- **궁극의 개선**: 모든 기능을 합친 최강 조합
+- 🎥 **비디오 업로드**: 드래그 앤 드롭으로 비디오 파일 업로드
+- 🔧 **화질 개선**: FFmpeg을 사용한 고품질 비디오 처리
+- 📊 **메타데이터 비교**: 원본과 개선된 비디오의 상세 비교
+- 📥 **다운로드 관리**: 개선된 비디오 다운로드 및 관리
+- 🗂️ **자동 정리**: 24시간 후 자동 파일 삭제
 
-## 🛠️ 기술 스택
+## 기술 스택
 
-- **Frontend**: React 18
-- **Backend**: Node.js + Express
-- **Video Processing**: FFmpeg + fluent-ffmpeg
-- **Styling**: Tailwind CSS
-- **Icons**: Lucide React
-- **Build Tool**: Create React App
+### Backend
+- **Node.js** + **Express**
+- **FFmpeg** (fluent-ffmpeg)
+- **Multer** (파일 업로드)
+- **CORS**, **Helmet** (보안)
+- **Express Rate Limit** (요청 제한)
 
-## 📦 설치 및 실행
+### Frontend
+- **React** + **TypeScript**
+- **Material-UI** (UI 컴포넌트)
+- **React Dropzone** (파일 업로드)
+- **Axios** (API 통신)
 
-### 1. 프론트엔드 (React)
+## 설치 및 실행
+
+### 1. 저장소 클론
 ```bash
-# 의존성 설치
-npm install
+git clone <repository-url>
+cd video-enhancement-app
+```
 
-# 개발 서버 시작
+### 2. Backend 설정
+```bash
+cd backend
+npm install
+cp env.example .env
+# .env 파일에서 환경 변수 설정
+npm run dev
+```
+
+### 3. Frontend 설정
+```bash
+cd frontend
+npm install
 npm start
 ```
 
-### 2. 백엔드 (FFmpeg 서버)
+### 4. Docker로 실행 (권장)
 ```bash
-# 서버 디렉토리로 이동
-cd server
+# 전체 애플리케이션 실행
+docker-compose up -d
 
-# 의존성 설치
-npm install
+# 로그 확인
+docker-compose logs -f
 
-# 서버 시작
-npm start
+# 중지
+docker-compose down
 ```
 
-### 3. FFmpeg 설치 확인
-```bash
-# FFmpeg이 설치되어 있는지 확인
-ffmpeg -version
+## 환경 변수 설정
+
+### Backend (.env)
+```env
+PORT=5000
+NODE_ENV=development
+FRONTEND_URL=http://localhost:3000
+MAX_FILE_SIZE=524288000
+FILE_EXPIRY_HOURS=24
+DEFAULT_RESOLUTION=1080p
+DEFAULT_BITRATE=5000k
+DEFAULT_FPS=30
+DEFAULT_QUALITY=high
 ```
 
-## 🎯 사용 방법
-
-1. **백엔드 서버 시작**: `cd server && npm start`
-2. **프론트엔드 서버 시작**: `npm start`
-3. **브라우저에서 `http://localhost:3000` 접속**
-4. **비디오 파일 업로드** (MP4, AVI, MOV, MKV, WebM 지원)
-5. **원하는 처리 옵션 선택** (6가지 중 선택)
-6. **실제 FFmpeg 처리 완료 후 결과 확인** 및 다운로드
-
-## ✅ 실제 처리 기능
-
-이제 **진짜 FFmpeg 명령어가 실행**되어 실제로 화질이 개선된 비디오를 받을 수 있습니다!
-
-- ✅ **실제 업스케일링**: 1920x1080 해상도로 변환
-- ✅ **실제 노이즈 제거**: hqdn3d 필터 적용
-- ✅ **실제 압축**: H.265 코덱으로 압축
-- ✅ **실제 색보정**: 밝기, 대비, 채도 조정
-- ✅ **실제 손떨림 보정**: deshake 필터 적용
-
-## 💡 실제 FFmpeg 명령어 예시
-
-```bash
-# AI 업스케일링
-ffmpeg -i input.mp4 -vf "scale=1920:1080:flags=lanczos,unsharp=5:5:1.2" -c:v libx264 -crf 16 upscaled.mp4
-
-# 화질 개선
-ffmpeg -i input.mp4 -vf "hqdn3d=4:3:6:4.5,unsharp=5:5:0.8,eq=brightness=0.02:contrast=1.1" enhanced.mp4
-
-# 극강 압축
-ffmpeg -i input.mp4 -c:v libx265 -crf 23 -preset veryslow -movflags faststart compressed.mp4
-
-# 영화급 색감
-ffmpeg -i input.mp4 -vf "eq=brightness=0.03:contrast=1.1:saturation=1.3:gamma=0.9" cinematic.mp4
-
-# 손떨림 보정
-ffmpeg -i input.mp4 -vf "deshake=rx=16:ry=16" stabilized.mp4
+### Frontend (.env)
+```env
+REACT_APP_API_URL=http://localhost:5000/api
 ```
 
-## 🎨 UI 특징
+## 사용법
 
-- 모던하고 세련된 디자인
-- 반응형 레이아웃
-- 실시간 처리 상태 표시
-- 비디오 메타데이터 자동 추출
-- 처리 결과 통계 제공
-- 서버 연결 상태 표시
+1. **비디오 업로드**: 브라우저에서 `http://localhost:3000` 접속
+2. **파일 선택**: 드래그 앤 드롭 또는 클릭하여 비디오 파일 업로드
+3. **화질 개선**: 업로드 완료 후 자동으로 화질 개선 시작
+4. **결과 확인**: 메타데이터 비교를 통해 개선 효과 확인
+5. **다운로드**: 개선된 비디오 다운로드
 
-## 🔥 커리어 팁
+## 지원 파일 형식
 
-이 프로젝트는 AI 비디오 엔지니어 취업을 위한 포트폴리오로 활용할 수 있습니다:
+### 입력 형식
+- MP4, AVI, MOV, MKV, WMV, WebM, FLV
 
-- Netflix, YouTube, Meta에서 높이 평가하는 FFmpeg 스킬
-- 대규모 비디오 처리, ML 데이터 준비, 스트리밍 최적화에 필수
-- 비디오 AI, 스트리밍, 메타버스 분야에서 핵심 기술
+### 출력 형식
+- MP4 (H.264 코덱)
 
-## 🚨 주의사항
+## API 엔드포인트
 
-- **FFmpeg 설치 필수**: 시스템에 FFmpeg이 설치되어 있어야 합니다
-- **서버 실행 필수**: 백엔드 서버가 실행되어야 실제 처리가 가능합니다
-- **파일 크기 제한**: 100MB까지 업로드 가능합니다
-- **처리 시간**: 비디오 길이와 복잡도에 따라 시간이 걸릴 수 있습니다
+### 업로드
+- `POST /api/upload` - 비디오 파일 업로드
+- `GET /api/upload` - 업로드된 파일 목록
+- `GET /api/upload/:fileId` - 특정 파일 정보
 
----
+### 화질 개선
+- `POST /api/enhance` - 화질 개선 요청
+- `GET /api/enhance/status/:jobId` - 작업 상태 확인
+- `GET /api/enhance/list` - 개선된 파일 목록
 
-**🔥 FFmpeg 체험관으로 무료 비디오 마스터 되기!**
+### 메타데이터
+- `GET /api/metadata/:fileId` - 파일 메타데이터
+- `GET /api/metadata/compare/:fileId` - 원본/개선 비교
+
+### 다운로드
+- `GET /api/download/:fileId` - 파일 다운로드
+- `DELETE /api/download/:fileId` - 파일 삭제
+- `GET /api/download/list/available` - 다운로드 가능 파일 목록
+
+## 개발 가이드
+
+### Backend 개발
+```bash
+cd backend
+npm run dev  # 개발 모드 (nodemon)
+npm start    # 프로덕션 모드
+```
+
+### Frontend 개발
+```bash
+cd frontend
+npm start    # 개발 서버
+npm run build # 프로덕션 빌드
+```
+
+### 테스트
+```bash
+# Backend 테스트
+cd backend
+npm test
+
+# Frontend 테스트
+cd frontend
+npm test
+```
+
+## 파일 구조
+
+```
+video-enhancement-app/
+├── backend/
+│   ├── routes/           # API 라우트
+│   ├── services/         # 비즈니스 로직
+│   ├── middleware/       # 미들웨어
+│   ├── utils/            # 유틸리티 함수
+│   ├── uploads/          # 업로드된 파일
+│   ├── processed/        # 처리된 파일
+│   └── temp/             # 임시 파일
+├── frontend/
+│   ├── src/
+│   │   ├── components/   # React 컴포넌트
+│   │   ├── services/     # API 서비스
+│   │   └── types/        # TypeScript 타입
+│   └── public/           # 정적 파일
+├── shared/               # 공유 코드
+└── docker-compose.yml    # Docker 설정
+```
+
+## 라이선스
+
+MIT License
+
+## 기여하기
+
+1. Fork the Project
+2. Create your Feature Branch (`git checkout -b feature/AmazingFeature`)
+3. Commit your Changes (`git commit -m 'Add some AmazingFeature'`)
+4. Push to the Branch (`git push origin feature/AmazingFeature`)
+5. Open a Pull Request
+
+## 문제 해결
+
+### 일반적인 문제
+
+1. **FFmpeg 오류**: FFmpeg이 시스템에 설치되어 있는지 확인
+2. **파일 업로드 실패**: 파일 크기 제한 (500MB) 확인
+3. **CORS 오류**: Backend CORS 설정 확인
+4. **메모리 부족**: 대용량 파일 처리 시 시스템 메모리 확인
+
+### 로그 확인
+```bash
+# Backend 로그
+docker-compose logs backend
+
+# Frontend 로그
+docker-compose logs frontend
+```
+
+## 업데이트 내역
+
+- **v1.0.0**: 초기 릴리스
+  - 기본 비디오 업로드 및 화질 개선 기능
+  - 메타데이터 비교 기능
+  - 다운로드 관리 기능

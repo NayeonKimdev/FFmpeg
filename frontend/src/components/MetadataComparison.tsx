@@ -5,11 +5,9 @@ import {
   Paper,
   Button,
   Alert,
-  CircularProgress,
-  Chip,
-  Divider
+  CircularProgress
 } from '@mui/material';
-import { Download, PlayArrow, Stop, Error } from '@mui/icons-material';
+import { Download } from '@mui/icons-material';
 import { compareMetadata, downloadFile, analyzeVideo } from '../services/api';
 import VideoPlayer from './VideoPlayer';
 

@@ -34,8 +34,32 @@ const VideoPlayer = ({
   const [isLoading, setIsLoading] = useState(true);
   const videoRef = useRef<HTMLVideoElement>(null);
   const [retryCount, setRetryCount] = useState(0);
+  const [loadingTimeout, setLoadingTimeout] = useState<NodeJS.Timeout | null>(null);
+
+  // 로딩 타임아웃 설정 (10초)
+  useEffect(() => {
+    if (isLoading) {
+      const timeout = setTimeout(() => {
+        console.warn(`${type} 비디오 로딩 타임아웃 (10초)`);
+        setVideoError('로딩 타임아웃: 비디오를 로드하는데 시간이 너무 오래 걸립니다.');
+        setIsLoading(false);
+      }, 10000);
+      
+      setLoadingTimeout(timeout);
+      
+      return () => {
+        if (timeout) clearTimeout(timeout);
+      };
+    }
+  }, [isLoading, type]);
 
   const handleVideoError = (e: React.SyntheticEvent<HTMLVideoElement>) => {
+    // 타임아웃 클리어
+    if (loadingTimeout) {
+      clearTimeout(loadingTimeout);
+      setLoadingTimeout(null);
+    }
+    
     const video = e.currentTarget;
     const error = video.error;
     
@@ -75,15 +99,21 @@ const VideoPlayer = ({
       retryCount: retryCount
     });
     
-    // 자동 재시도 (최대 2회)
-    if (retryCount < 2 && errorCode !== MediaError.MEDIA_ERR_SRC_NOT_SUPPORTED) {
+    // 자동 재시도 (최대 1회로 줄임)
+    if (retryCount < 1) {
       setTimeout(() => {
         handleRetry();
-      }, 2000 + (retryCount * 1000)); // 점진적 지연
+      }, 5000); // 5초 후 재시도
     }
   };
 
   const handleCanPlay = () => {
+    // 타임아웃 클리어
+    if (loadingTimeout) {
+      clearTimeout(loadingTimeout);
+      setLoadingTimeout(null);
+    }
+    
     setVideoError(null);
     setIsLoading(false);
     setRetryCount(0);

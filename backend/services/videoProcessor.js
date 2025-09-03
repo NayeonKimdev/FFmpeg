@@ -140,46 +140,49 @@ const processVideo = (inputPath, options = {}) => {
       // 오디오 처리 전략 결정
       let audioOptions = [];
       
-      // 비디오 처리 옵션 (최대 호환성으로 단순화)
+      // 비디오 처리 옵션 (웹 호환성 최우선)
       const videoOptions = [
         `-c:v ${codec}`,
-        `-crf 28`, // 23에서 28로 변경 (더 안전)
-        `-maxrate ${Math.round(parseInt(bitrate) * 0.6)}k`, // 비트레이트 더 보수적으로
-        `-bufsize ${Math.round(parseInt(bitrate) * 1.0)}k`, // 버퍼 크기 더 줄임
-        `-r ${Math.min(fps, 25)}`, // FPS 제한 (30에서 25로)
-        `-vf scale=${resolutionSettings}:flags=lanczos`, // format=yuv420p 제거
-        '-preset ultrafast', // fast에서 ultrafast로 변경 (최대 속도)
-        '-pix_fmt yuv420p',
-        '-profile:v baseline',
-        '-level 3.0', // 3.1에서 3.0으로 (더 안전)
-        '-movflags +faststart', // 복잡한 플래그 제거
+        `-crf 23`, // 20에서 23으로 변경 (더 안전)
+        `-maxrate ${Math.round(parseInt(bitrate) * 0.8)}k`, // 비트레이트 더 보수적으로
+        `-bufsize ${Math.round(parseInt(bitrate) * 1.5)}k`, // 버퍼 크기 감소
+        `-r ${Math.min(fps, 30)}`, // FPS 제한 (30 이하)
+        `-vf scale=${resolutionSettings}:flags=lanczos,format=yuv420p`, // 픽셀 포맷 강제 지정
+        '-preset fast', // medium에서 fast로 변경 (속도 우선)
+        '-pix_fmt yuv420p', // 중복이지만 확실하게
+        '-profile:v baseline', // main에서 baseline으로 (최대 호환성)
+        '-level 3.1', // 4.0에서 3.1로 (더 넓은 호환성)
+        '-movflags +faststart+frag_keyframe+empty_moov', // 스트리밍 최적화 강화
         '-avoid_negative_ts make_zero',
-        '-fflags +genpts', // igndts 제거
-        '-vsync cfr',
-        '-max_muxing_queue_size 1024' // 큐 크기 줄임
+        '-fflags +genpts+igndts', // 타임스탬프 처리 개선
+        '-vsync cfr', // 일정한 프레임레이트 강제
+        '-max_muxing_queue_size 9999' // 큐 크기 증가
       ];
 
-      // 오디오 처리 (더 단순하게)
+      // 오디오 처리 (더 안전하게)
       if (!inputMetadata.hasAudio) {
         audioOptions.push('-an');
         console.log('오디오 처리: 오디오 스트림 없음');
       } else {
-        // 단순한 AAC 재인코딩
+        // 모든 오디오를 AAC로 재인코딩 (호환성 최우선)
         audioOptions = [
           '-c:a aac',
-          '-b:a 96k', // 128k에서 96k로 줄임
+          '-b:a 128k',
           '-ar 44100',
-          '-ac 2'
+          '-ac 2',
+          '-profile:a aac_low',
+          '-aac_coder twoloop' // AAC 인코더 개선
         ];
-        console.log(`오디오 처리: ${inputMetadata.audioCodec} -> AAC 재인코딩 (단순화)`);
+        console.log(`오디오 처리: ${inputMetadata.audioCodec} -> AAC 재인코딩 (호환성 최우선)`);
       }
 
-      // GOP 설정 (더 단순하게)
-      const gopSize = Math.min(Math.round(fps * 1.0), 25); // 1.5초에서 1.0초로
+      // GOP 설정 (더 보수적)
+      const gopSize = Math.min(Math.round(fps * 1.5), 30); // 1.5초, 최대 30프레임
       videoOptions.push(
         `-g ${gopSize}`,
-        `-keyint_min ${Math.round(gopSize / 2)}`, // 3에서 2로
-        '-sc_threshold 0' // 40에서 0으로 (장면 변화 감지 비활성화)
+        `-keyint_min ${Math.round(gopSize / 3)}`, // 더 자주 키프레임
+        '-sc_threshold 40',
+        '-force_key_frames expr:gte(t,n_forced*2)' // 2초마다 강제 키프레임
       );
 
       console.log(`GOP 크기: ${gopSize} (${gopSize/fps}초)`);
@@ -214,15 +217,20 @@ const processVideo = (inputPath, options = {}) => {
           })
           .on('stderr', (stderrLine) => {
             stderrOutput.push(stderrLine);
-            // 중요한 오류만 로그
-            if (stderrLine.includes('Error') || stderrLine.includes('failed') || stderrLine.includes('Invalid')) {
-              console.error('FFmpeg stderr:', stderrLine);
+            // 모든 stderr 출력 (디버깅용)
+            console.log('FFmpeg stderr:', stderrLine);
+          })
+          .on('end', async () => {
+            console.log('=== FFmpeg 완료, 후처리 시작 ===');
+            try {
+              await postProcessOutput(outputPath);
+              console.log('=== 후처리 완료 ===');
+              resolve();
+            } catch (error) {
+              console.error('후처리 오류:', error);
+              resolve(); // 후처리 실패해도 계속 진행
             }
           })
-                     .on('end', () => {
-             console.log('=== FFmpeg 완료 ===');
-             resolve();
-           })
           .on('error', (err) => {
             console.error('=== FFmpeg 오류 ===');
             console.error('오류 메시지:', err.message);

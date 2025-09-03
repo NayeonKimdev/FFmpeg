@@ -26,14 +26,7 @@ router.get('/stream/:fileId', async (req, res) => {
     
     let filePath;
     if (type === 'original') {
-      // 원본 파일 경로에서 확장자 정규화
-      const normalizedFileId = normalizeFileExtension(fileId);
-      filePath = path.join(__dirname, '../uploads', normalizedFileId);
-      
-      // 정규화된 파일이 없으면 원본 파일명으로 시도
-      if (!fs.existsSync(filePath)) {
-        filePath = path.join(__dirname, '../uploads', fileId);
-      }
+      filePath = path.join(__dirname, '../uploads', fileId);
     } else {
       const inputFileName = path.basename(fileId, path.extname(fileId));
       const enhancedFileName = `${inputFileName}_enhanced.mp4`;

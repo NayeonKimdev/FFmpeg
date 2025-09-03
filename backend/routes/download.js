@@ -3,6 +3,19 @@ const path = require('path');
 const fs = require('fs');
 const router = express.Router();
 
+// 파일 확장자 정규화 함수 추가
+const normalizeFileExtension = (filename) => {
+  const ext = path.extname(filename).toLowerCase();
+  const nameWithoutExt = path.basename(filename, path.extname(filename));
+  
+  // 대문자 확장자를 소문자로 변경
+  if (ext === '.mp4' || ext === '.MP4') {
+    return `${nameWithoutExt}.mp4`;
+  }
+  
+  return filename;
+};
+
 // 비디오 스트리밍 (강화된 호환성)
 router.get('/stream/:fileId', async (req, res) => {
   try {
@@ -13,7 +26,14 @@ router.get('/stream/:fileId', async (req, res) => {
     
     let filePath;
     if (type === 'original') {
-      filePath = path.join(__dirname, '../uploads', fileId);
+      // 원본 파일 경로에서 확장자 정규화
+      const normalizedFileId = normalizeFileExtension(fileId);
+      filePath = path.join(__dirname, '../uploads', normalizedFileId);
+      
+      // 정규화된 파일이 없으면 원본 파일명으로 시도
+      if (!fs.existsSync(filePath)) {
+        filePath = path.join(__dirname, '../uploads', fileId);
+      }
     } else {
       const inputFileName = path.basename(fileId, path.extname(fileId));
       const enhancedFileName = `${inputFileName}_enhanced.mp4`;

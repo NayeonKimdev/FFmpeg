@@ -44,10 +44,10 @@ app.use(cors({
   exposedHeaders: ['Content-Range', 'Accept-Ranges', 'Content-Length']
 }));
 
-// 레이트 리미팅 설정
+// 레이트 리미팅 설정 (완화)
 const limiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15분
-  max: 1000, // IP당 최대 요청 수 (100에서 1000으로 증가)
+  max: 5000, // IP당 최대 요청 수 (1000에서 5000으로 증가)
   message: '너무 많은 요청이 발생했습니다. 잠시 후 다시 시도해주세요.'
 });
 app.use('/api/', limiter);
@@ -55,9 +55,17 @@ app.use('/api/', limiter);
 // 파일 업로드용 더 높은 제한
 const uploadLimiter = rateLimit({
   windowMs: 60 * 60 * 1000, // 1시간
-  max: 50, // IP당 최대 업로드 수 (10에서 50으로 증가)
+  max: 100, // IP당 최대 업로드 수 (50에서 100으로 증가)
   message: '업로드 제한에 도달했습니다. 잠시 후 다시 시도해주세요.'
 });
+
+// 스트리밍 전용 리미터 (매우 관대하게)
+const streamingLimiter = rateLimit({
+  windowMs: 1 * 60 * 1000, // 1분
+  max: 1000, // IP당 최대 스트리밍 요청 수
+  message: '스트리밍 요청이 너무 많습니다. 잠시 후 다시 시도해주세요.'
+});
+app.use('/api/download/stream', streamingLimiter);
 
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));

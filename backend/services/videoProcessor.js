@@ -140,55 +140,49 @@ const processVideo = (inputPath, options = {}) => {
       // 오디오 처리 전략 결정
       let audioOptions = [];
       
+      // 비디오 처리 옵션 (웹 호환성 최우선)
+      const videoOptions = [
+        `-c:v ${codec}`,
+        `-crf 23`, // 20에서 23으로 변경 (더 안전)
+        `-maxrate ${Math.round(parseInt(bitrate) * 0.8)}k`, // 비트레이트 더 보수적으로
+        `-bufsize ${Math.round(parseInt(bitrate) * 1.5)}k`, // 버퍼 크기 감소
+        `-r ${Math.min(fps, 30)}`, // FPS 제한 (30 이하)
+        `-vf scale=${resolutionSettings}:flags=lanczos,format=yuv420p`, // 픽셀 포맷 강제 지정
+        '-preset fast', // medium에서 fast로 변경 (속도 우선)
+        '-pix_fmt yuv420p', // 중복이지만 확실하게
+        '-profile:v baseline', // main에서 baseline으로 (최대 호환성)
+        '-level 3.1', // 4.0에서 3.1로 (더 넓은 호환성)
+        '-movflags +faststart+frag_keyframe+empty_moov', // 스트리밍 최적화 강화
+        '-avoid_negative_ts make_zero',
+        '-fflags +genpts+igndts', // 타임스탬프 처리 개선
+        '-vsync cfr', // 일정한 프레임레이트 강제
+        '-max_muxing_queue_size 9999' // 큐 크기 증가
+      ];
+
+      // 오디오 처리 (더 안전하게)
       if (!inputMetadata.hasAudio) {
-        // 오디오 없음
         audioOptions.push('-an');
         console.log('오디오 처리: 오디오 스트림 없음');
       } else {
-        // 오디오가 있는 경우 - 안전한 재인코딩
-        const audioCodec = inputMetadata.audioCodec;
-        
-        if (audioCodec === 'aac') {
-          // AAC는 MP4와 완벽 호환 - 복사 가능
-          audioOptions.push('-c:a copy');
-          console.log('오디오 처리: AAC 코덱 - 복사');
-        } else {
-          // 다른 코덱은 AAC로 재인코딩
-          audioOptions = [
-            '-c:a aac',
-            '-b:a 128k', // 128kbps로 고정
-            '-ar 44100', // 44.1kHz 샘플레이트
-            '-ac 2', // 스테레오
-            '-profile:a aac_low' // AAC-LC 프로필
-          ];
-          console.log(`오디오 처리: ${audioCodec} -> AAC 재인코딩`);
-        }
+        // 모든 오디오를 AAC로 재인코딩 (호환성 최우선)
+        audioOptions = [
+          '-c:a aac',
+          '-b:a 128k',
+          '-ar 44100',
+          '-ac 2',
+          '-profile:a aac_low',
+          '-aac_coder twoloop' // AAC 인코더 개선
+        ];
+        console.log(`오디오 처리: ${inputMetadata.audioCodec} -> AAC 재인코딩 (호환성 최우선)`);
       }
 
-      // 비디오 처리 옵션 (더 안전하게)
-      const videoOptions = [
-        `-c:v ${codec}`,
-        `-crf ${qualitySettings}`, // CRF 먼저 설정
-        `-maxrate ${bitrate}`, // 최대 비트레이트 제한
-        `-bufsize ${Math.round(parseInt(bitrate) * 2)}k`, // 버퍼 크기
-        `-r ${fps}`,
-        `-vf scale=${resolutionSettings}:flags=lanczos`,
-        '-preset medium', // fast에서 medium으로 변경 (더 안정적)
-        '-pix_fmt yuv420p',
-        '-profile:v main', // baseline에서 main으로 변경 (더 효율적)
-        '-level 4.0', // 3.1에서 4.0으로 변경 (더 넓은 호환성)
-        '-movflags +faststart',
-        '-avoid_negative_ts make_zero',
-        '-fflags +genpts', // 타임스탬프 생성
-        '-max_interleave_delta 0' // 인터리브 델타 최대화
-      ];
-
-      // GOP 설정 (더 보수적으로)
-      const gopSize = Math.min(Math.round(fps * 2), 60); // 최대 2초, 60프레임 제한
+      // GOP 설정 (더 보수적)
+      const gopSize = Math.min(Math.round(fps * 1.5), 30); // 1.5초, 최대 30프레임
       videoOptions.push(
         `-g ${gopSize}`,
-        `-keyint_min ${Math.round(gopSize / 2)}`,
-        '-sc_threshold 40' // 장면 변화 감지 활성화 (0에서 40으로)
+        `-keyint_min ${Math.round(gopSize / 3)}`, // 더 자주 키프레임
+        '-sc_threshold 40',
+        '-force_key_frames expr:gte(t,n_forced*2)' // 2초마다 강제 키프레임
       );
 
       console.log(`GOP 크기: ${gopSize} (${gopSize/fps}초)`);
@@ -228,9 +222,16 @@ const processVideo = (inputPath, options = {}) => {
               console.error('FFmpeg stderr:', stderrLine);
             }
           })
-          .on('end', () => {
-            console.log('=== FFmpeg 완료 ===');
-            resolve();
+          .on('end', async () => {
+            console.log('=== FFmpeg 완료, 후처리 시작 ===');
+            try {
+              await postProcessOutput(outputPath);
+              console.log('=== 후처리 완료 ===');
+              resolve();
+            } catch (error) {
+              console.error('후처리 오류:', error);
+              resolve(); // 후처리 실패해도 계속 진행
+            }
           })
           .on('error', (err) => {
             console.error('=== FFmpeg 오류 ===');
@@ -287,9 +288,17 @@ const processVideo = (inputPath, options = {}) => {
           throw new Error('출력 파일에 비디오 스트림이 없습니다.');
         }
 
-        console.log('=== 출력 파일 검증 완료 ===');
-        console.log(`파일 크기: ${Math.round(stats.size / 1024)}KB`);
-        console.log(`비디오 스트림: ${videoStream.codec_name} ${videoStream.width}x${videoStream.height}`);
+                 console.log('=== 출력 파일 검증 완료 ===');
+         console.log(`파일 크기: ${Math.round(stats.size / 1024)}KB`);
+         console.log(`비디오 스트림: ${videoStream.codec_name} ${videoStream.width}x${videoStream.height}`);
+
+         // 웹 호환성 검증
+         const compatibilityCheck = await validateWebCompatibility(outputPath);
+         if (!compatibilityCheck.compatible) {
+           console.warn('웹 호환성 문제 발견:', compatibilityCheck.issues);
+         } else {
+           console.log('웹 호환성 검증 통과');
+         }
       } catch (metadataError) {
         fs.unlinkSync(outputPath);
         throw new Error(`출력 파일 검증 실패: ${metadataError.message}`);
@@ -570,10 +579,86 @@ const cleanupTempFiles = (tempDir = path.join(__dirname, '../temp')) => {
   }
 };
 
+/**
+ * 출력 파일 후처리 (FFmpeg 완료 후)
+ */
+const postProcessOutput = async (outputPath) => {
+  // MP4 파일 최적화
+  const tempPath = outputPath + '.temp';
+  
+  return new Promise((resolve, reject) => {
+    ffmpeg(outputPath)
+      .outputOptions([
+        '-c copy', // 재인코딩 없이 컨테이너만 최적화
+        '-movflags faststart',
+        '-fflags +genpts'
+      ])
+      .output(tempPath)
+      .on('end', () => {
+        // 원본 파일을 최적화된 파일로 교체
+        fs.renameSync(tempPath, outputPath);
+        resolve(outputPath);
+      })
+      .on('error', (err) => {
+        console.warn('후처리 실패, 원본 유지:', err.message);
+        if (fs.existsSync(tempPath)) {
+          fs.unlinkSync(tempPath);
+        }
+        resolve(outputPath); // 실패해도 원본 파일 유지
+      })
+      .run();
+  });
+};
+
+/**
+ * 웹 호환성 검증 함수
+ */
+const validateWebCompatibility = async (filePath) => {
+  return new Promise((resolve) => {
+    ffmpeg.ffprobe(filePath, (err, metadata) => {
+      if (err) {
+        resolve({ compatible: false, issues: ['메타데이터 읽기 실패'] });
+        return;
+      }
+
+      const videoStream = metadata.streams.find(s => s.codec_type === 'video');
+      const issues = [];
+
+      if (!videoStream) {
+        issues.push('비디오 스트림 없음');
+      } else {
+        // 프로필 확인
+        if (videoStream.profile && !['Baseline', 'Main', 'baseline', 'main'].includes(videoStream.profile)) {
+          issues.push(`비호환 프로필: ${videoStream.profile}`);
+        }
+
+        // 픽셀 포맷 확인
+        if (videoStream.pix_fmt !== 'yuv420p') {
+          issues.push(`비호환 픽셀 포맷: ${videoStream.pix_fmt}`);
+        }
+
+        // 해상도 확인
+        const width = videoStream.width;
+        const height = videoStream.height;
+        if (width % 2 !== 0 || height % 2 !== 0) {
+          issues.push(`홀수 해상도: ${width}x${height}`);
+        }
+      }
+
+      resolve({
+        compatible: issues.length === 0,
+        issues: issues
+      });
+    });
+  });
+};
+
 module.exports = {
   processVideo,
   extractMetadata,
   validateVideoFile,
   cleanupTempFiles,
-  analyzeVideoDetails
+  analyzeVideoDetails,
+  postProcessOutput,
+  validateWebCompatibility
 };

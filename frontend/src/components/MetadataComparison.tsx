@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   Box,
   Paper,
@@ -32,6 +32,8 @@ const VideoPlayer = ({
 }) => {
   const [videoError, setVideoError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const videoRef = useRef<HTMLVideoElement>(null);
+  const [retryCount, setRetryCount] = useState(0);
 
   const handleVideoError = (e: React.SyntheticEvent<HTMLVideoElement>) => {
     const video = e.currentTarget;
@@ -50,7 +52,7 @@ const VideoPlayer = ({
           errorMessage = 'NETWORK: 네트워크 오류로 비디오를 로드할 수 없습니다.';
           break;
         case MediaError.MEDIA_ERR_DECODE:
-          errorMessage = 'DECODE_ERROR: 비디오 디코딩 실패 (파일이 손상되었거나 지원되지 않는 형식)';
+          errorMessage = 'DECODE_ERROR: 비디오 디코딩 실패 (파일 형식 문제)';
           break;
         case MediaError.MEDIA_ERR_SRC_NOT_SUPPORTED:
           errorMessage = 'FORMAT_ERROR: 지원하지 않는 비디오 형식입니다.';
@@ -64,18 +66,27 @@ const VideoPlayer = ({
     
     setVideoError(errorMessage);
     setIsLoading(false);
-    onError({ code: errorCode, message: errorMessage, type });
+    onError({ code: errorCode, message: errorMessage, type, src });
     
     console.error(`${type} 비디오 오류:`, {
       code: errorCode,
       message: errorMessage,
-      src: src
+      src: src,
+      retryCount: retryCount
     });
+    
+    // 자동 재시도 (최대 2회)
+    if (retryCount < 2 && errorCode !== MediaError.MEDIA_ERR_SRC_NOT_SUPPORTED) {
+      setTimeout(() => {
+        handleRetry();
+      }, 2000 + (retryCount * 1000)); // 점진적 지연
+    }
   };
 
   const handleCanPlay = () => {
     setVideoError(null);
     setIsLoading(false);
+    setRetryCount(0);
     console.log(`${type} 비디오 재생 가능`);
   };
 
@@ -86,13 +97,50 @@ const VideoPlayer = ({
   };
 
   const handleRetry = () => {
+    if (retryCount >= 3) {
+      console.log(`${type} 비디오 최대 재시도 횟수 초과`);
+      return;
+    }
+    
     setVideoError(null);
     setIsLoading(true);
-    const video = document.querySelector(`video[data-type="${type}"]`) as HTMLVideoElement;
-    if (video) {
-      video.load();
+    setRetryCount(prev => prev + 1);
+    
+    if (videoRef.current) {
+      // 비디오 요소 완전 초기화
+      videoRef.current.src = '';
+      videoRef.current.load();
+      
+      // 새 URL로 다시 로드 (캐시 무효화)
+      setTimeout(() => {
+        if (videoRef.current) {
+          const cacheBuster = `?t=${Date.now()}&retry=${retryCount + 1}`;
+          videoRef.current.src = src + cacheBuster;
+          videoRef.current.load();
+        }
+      }, 500);
     }
   };
+
+  const handleManualRetry = () => {
+    setRetryCount(0);
+    handleRetry();
+  };
+
+  // 스트리밍 URL 생성 (더 안전하게)
+  const getStreamingUrl = (originalSrc: string) => {
+    const baseUrl = originalSrc.split('?')[0]; // 기존 쿼리 제거
+    const cacheBuster = `?t=${Date.now()}`;
+    
+    // 스트리밍 엔드포인트로 변경
+    if (type === 'enhanced') {
+      return baseUrl.replace('/processed/', '/api/download/stream/').replace('_enhanced.mp4', '') + '?type=enhanced' + '&cb=' + Date.now();
+    } else {
+      return baseUrl.replace('/uploads/', '/api/download/stream/') + '?type=original' + '&cb=' + Date.now();
+    }
+  };
+
+  const streamingUrl = getStreamingUrl(src);
 
   return (
     <div style={{ position: 'relative', width: '100%', height: '100%' }}>
@@ -110,25 +158,41 @@ const VideoPlayer = ({
           zIndex: 1
         }}>
           <CircularProgress size={40} />
+          <Typography variant="caption" sx={{ ml: 1 }}>
+            {retryCount > 0 ? `재시도 중... (${retryCount}/3)` : '로딩 중...'}
+          </Typography>
         </div>
       )}
       
       <video
+        ref={videoRef}
         data-type={type}
         controls
         preload="metadata"
         crossOrigin="anonymous"
+        muted // 브라우저 자동재생 정책 대응
+        playsInline // iOS 대응
         style={{ 
           width: '100%', 
           height: '100%', 
-          objectFit: 'cover' 
+          objectFit: 'cover',
+          backgroundColor: '#000'
         }}
-        src={src}
+        src={streamingUrl}
         onError={handleVideoError}
         onCanPlay={handleCanPlay}
         onLoadStart={handleLoadStart}
         onLoadedMetadata={() => {
           console.log(`${type} 비디오 메타데이터 로드 완료`);
+        }}
+        onSuspend={() => {
+          console.log(`${type} 비디오 서스펜드`);
+        }}
+        onStalled={() => {
+          console.log(`${type} 비디오 스톨됨`);
+        }}
+        onWaiting={() => {
+          console.log(`${type} 비디오 대기 중`);
         }}
       >
         브라우저가 비디오를 지원하지 않습니다.
@@ -151,22 +215,35 @@ const VideoPlayer = ({
           textAlign: 'center'
         }}>
           <Typography variant="body2" color="error" gutterBottom>
-            비디오 로드 실패
+            비디오 로드 실패 ({retryCount}/3 재시도됨)
           </Typography>
           <Typography variant="caption" color="textSecondary" sx={{ mb: 2 }}>
             {videoError}
           </Typography>
-          <Typography variant="caption" color="info.main" sx={{ mb: 2 }}>
-            {type === 'enhanced' ? '개선된 비디오는 완전한 리인코딩으로 안정성을 확보합니다.' : ''}
-          </Typography>
+          {type === 'enhanced' && (
+            <Typography variant="caption" color="info.main" sx={{ mb: 2 }}>
+              개선 과정에서 일시적인 호환성 문제가 발생할 수 있습니다.
+            </Typography>
+          )}
           <Button 
             variant="outlined" 
             size="small" 
-            onClick={handleRetry}
+            onClick={handleManualRetry}
+            disabled={retryCount >= 3}
             sx={{ mt: 1 }}
           >
-            재시도
+            {retryCount >= 3 ? '재시도 한계 초과' : '수동 재시도'}
           </Button>
+          {type === 'enhanced' && (
+            <Button 
+              variant="text" 
+              size="small" 
+              onClick={() => window.open(src, '_blank')}
+              sx={{ mt: 1 }}
+            >
+              새 탭에서 열기
+            </Button>
+          )}
         </div>
       )}
     </div>

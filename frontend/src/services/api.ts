@@ -44,23 +44,27 @@ export interface UploadedFile {
 
 export interface EnhancementOptions {
   resolution?: string;
-  bitrate?: string;
-  fps?: number;
-  codec?: string;
   quality?: string;
+  codec?: string;
 }
 
 export interface EnhancementResult {
   jobId: string;
   message: string;
   options: EnhancementOptions;
+  estimatedTime?: string;
 }
 
 export interface EnhancementStatus {
-  status: 'processing' | 'completed';
+  status: 'processing' | 'completed' | 'failed';
   progress?: number;
   file?: any;
   message?: string;
+  error?: string;
+  lastModified?: string;
+  metadata?: any;
+  analysis?: any;
+  estimatedTime?: string;
 }
 
 export interface Metadata {
@@ -76,41 +80,13 @@ export interface Metadata {
     fps: number;
     bitrate: string;
     duration: string;
-  };
+  } | null;
   audio: {
     codec: string;
     sampleRate: string;
     channels: number;
     bitrate: string;
-  };
-}
-
-export interface ComparisonData {
-  original: {
-    metadata: Metadata;
-    fileInfo: any;
   } | null;
-  enhanced: {
-    metadata: Metadata;
-    fileInfo: any;
-  } | null;
-  improvements: {
-    fileSizeChange: {
-      original: number;
-      enhanced: number;
-      change: number;
-      percentage: string;
-    };
-    resolutionChange: {
-      original: string;
-      enhanced: string;
-    };
-    bitrateChange: {
-      original: string;
-      enhanced: string;
-    };
-  } | null;
-  hasEnhanced: boolean;
 }
 
 export interface VideoAnalysis {
@@ -151,6 +127,55 @@ export interface VideoAnalysis {
   };
 }
 
+export interface ComparisonData {
+  comparison: {
+    original: {
+      metadata: Metadata;
+      analysis: VideoAnalysis;
+      fileInfo: any;
+    } | null;
+    enhanced: {
+      metadata: Metadata;
+      analysis: VideoAnalysis;
+      fileInfo: any;
+    } | null;
+  };
+  improvements: {
+    fileSize: {
+      original: number;
+      enhanced: number;
+      change: number;
+      percentage: string;
+    };
+    resolution: {
+      original: string;
+      enhanced: string;
+      improved: boolean;
+    };
+    fps: {
+      original: number;
+      enhanced: number;
+      improved: boolean;
+    };
+    bitrate: {
+      original: string;
+      enhanced: string;
+    };
+    audio: {
+      original: string;
+      enhanced: string;
+      improved: boolean;
+    };
+    syncIssues: {
+      original: { hasSyncProblem: boolean };
+      enhanced: { hasSyncProblem: boolean };
+      improved: boolean;
+    };
+  } | null;
+  hasEnhanced: boolean;
+  comparedAt?: string;
+}
+
 export interface DownloadableFile {
   id: string;
   name: string;
@@ -158,6 +183,24 @@ export interface DownloadableFile {
   size: number;
   availableAt: string;
   path: string;
+}
+
+export interface BatchMetadataResult {
+  fileId: string;
+  success: boolean;
+  metadata?: Metadata;
+  analysis?: VideoAnalysis;
+  fileInfo?: any;
+  error?: string;
+}
+
+export interface BatchMetadataResponse {
+  results: BatchMetadataResult[];
+  summary: {
+    total: number;
+    successful: number;
+    failed: number;
+  };
 }
 
 // 파일 업로드
@@ -209,6 +252,12 @@ export const getEnhancementStatus = async (jobId: string): Promise<EnhancementSt
   return response.data;
 };
 
+// 개선 작업 취소
+export const cancelEnhancement = async (jobId: string): Promise<{ message: string }> => {
+  const response: AxiosResponse<{ message: string }> = await api.delete(`/enhance/cancel/${jobId}`);
+  return response.data;
+};
+
 // 개선된 파일 목록 조회
 export const getEnhancedFiles = async (): Promise<{ files: any[] }> => {
   const response: AxiosResponse<{ files: any[] }> = await api.get('/enhance/list');
@@ -219,8 +268,8 @@ export const getEnhancedFiles = async (): Promise<{ files: any[] }> => {
 export const getMetadata = async (
   fileId: string,
   type: 'original' | 'enhanced' = 'original'
-): Promise<{ metadata: Metadata; fileInfo: any; type: string }> => {
-  const response: AxiosResponse<{ metadata: Metadata; fileInfo: any; type: string }> = await api.get(
+): Promise<{ metadata: Metadata; analysis: VideoAnalysis; fileInfo: any; type: string; extractedAt: string }> => {
+  const response: AxiosResponse<{ metadata: Metadata; analysis: VideoAnalysis; fileInfo: any; type: string; extractedAt: string }> = await api.get(
     `/metadata/${fileId}?type=${type}`
   );
   return response.data;
@@ -229,6 +278,18 @@ export const getMetadata = async (
 // 메타데이터 비교
 export const compareMetadata = async (fileId: string): Promise<ComparisonData> => {
   const response: AxiosResponse<ComparisonData> = await api.get(`/metadata/compare/${fileId}`);
+  return response.data;
+};
+
+// 일괄 메타데이터 추출
+export const batchExtractMetadata = async (
+  fileIds: string[],
+  type: 'original' | 'enhanced' = 'original'
+): Promise<BatchMetadataResponse> => {
+  const response: AxiosResponse<BatchMetadataResponse> = await api.post('/metadata/batch', {
+    fileIds,
+    type
+  });
   return response.data;
 };
 

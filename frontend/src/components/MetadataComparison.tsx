@@ -50,7 +50,7 @@ const VideoPlayer = ({
           errorMessage = 'NETWORK: 네트워크 오류로 비디오를 로드할 수 없습니다.';
           break;
         case MediaError.MEDIA_ERR_DECODE:
-          errorMessage = 'DECODE_ERROR: 비디오 디코딩 실패 (완전한 리인코딩 처리됨)';
+          errorMessage = 'DECODE_ERROR: 비디오 디코딩 실패 (파일이 손상되었거나 지원되지 않는 형식)';
           break;
         case MediaError.MEDIA_ERR_SRC_NOT_SUPPORTED:
           errorMessage = 'FORMAT_ERROR: 지원하지 않는 비디오 형식입니다.';
@@ -300,17 +300,17 @@ const MetadataComparison: React.FC<MetadataComparisonProps> = ({ fileId }) => {
                 <Typography variant="body2" color="text.secondary">
                   파일 크기 변화
                 </Typography>
-                <Typography variant="h6" color={comparison.improvements.fileSizeChange.change > 0 ? 'error' : 'success'}>
-                  {comparison.improvements.fileSizeChange.percentage}%
-                  {comparison.improvements.fileSizeChange.change > 0 ? <TrendingUp /> : <TrendingDown />}
+                                <Typography variant="h6" color={comparison.improvements.fileSize.change > 0 ? 'error' : 'success'}>
+                  {comparison.improvements.fileSize.percentage}%
+                  {comparison.improvements.fileSize.change > 0 ? <TrendingUp /> : <TrendingDown />}
                 </Typography>
               </Box>
-                                           <Box sx={{ textAlign: 'center', flex: 1 }}>
+              <Box sx={{ textAlign: 'center', flex: 1 }}>
                 <Typography variant="body2" color="text.secondary">
                   해상도
                 </Typography>
                 <Typography variant="h6">
-                  {comparison.improvements.resolutionChange.original} → {comparison.improvements.resolutionChange.enhanced}
+                  {comparison.improvements.resolution.original} → {comparison.improvements.resolution.enhanced}
                 </Typography>
               </Box>
               <Box sx={{ textAlign: 'center', flex: 1 }}>
@@ -318,7 +318,7 @@ const MetadataComparison: React.FC<MetadataComparisonProps> = ({ fileId }) => {
                   비트레이트
                 </Typography>
                 <Typography variant="h6">
-                  {comparison.improvements.bitrateChange.original} → {comparison.improvements.bitrateChange.enhanced}
+                  {comparison.improvements.bitrate.original} → {comparison.improvements.bitrate.enhanced}
                 </Typography>
               </Box>
             </Box>
@@ -345,10 +345,10 @@ const MetadataComparison: React.FC<MetadataComparisonProps> = ({ fileId }) => {
                 <strong>파일 크기</strong>
               </TableCell>
               <TableCell align="center">
-                {comparison.original ? formatFileSize(comparison.original.fileInfo.size) : '-'}
+                {comparison.comparison.original ? formatFileSize(comparison.comparison.original.fileInfo.size) : '-'}
               </TableCell>
               <TableCell align="center">
-                {comparison.enhanced ? formatFileSize(comparison.enhanced.fileInfo.size) : '-'}
+                {comparison.comparison.enhanced ? formatFileSize(comparison.comparison.enhanced.fileInfo.size) : '-'}
               </TableCell>
             </TableRow>
                                      <TableRow>
@@ -356,10 +356,10 @@ const MetadataComparison: React.FC<MetadataComparisonProps> = ({ fileId }) => {
                 <strong>해상도</strong>
               </TableCell>
               <TableCell align="center">
-                {comparison.original?.metadata?.video?.resolution || '분석 중...'}
+                {comparison.comparison.original?.metadata?.video?.resolution || '분석 중...'}
               </TableCell>
               <TableCell align="center">
-                {comparison.enhanced?.metadata?.video?.resolution || '분석 중...'}
+                {comparison.comparison.enhanced?.metadata?.video?.resolution || '분석 중...'}
               </TableCell>
             </TableRow>
             <TableRow>
@@ -367,10 +367,10 @@ const MetadataComparison: React.FC<MetadataComparisonProps> = ({ fileId }) => {
                 <strong>비트레이트</strong>
               </TableCell>
               <TableCell align="center">
-                {comparison.original?.metadata?.video?.bitrate ? `${Math.round(Number(comparison.original.metadata.video.bitrate) / 1000)}k` : '분석 중...'}
+                {comparison.comparison.original?.metadata?.video?.bitrate ? `${Math.round(Number(comparison.comparison.original.metadata.video.bitrate) / 1000)}k` : '분석 중...'}
               </TableCell>
               <TableCell align="center">
-                {comparison.enhanced?.metadata?.video?.bitrate ? `${Math.round(Number(comparison.enhanced.metadata.video.bitrate) / 1000)}k` : '분석 중...'}
+                {comparison.comparison.enhanced?.metadata?.video?.bitrate ? `${Math.round(Number(comparison.comparison.enhanced.metadata.video.bitrate) / 1000)}k` : '분석 중...'}
               </TableCell>
             </TableRow>
             <TableRow>
@@ -378,10 +378,10 @@ const MetadataComparison: React.FC<MetadataComparisonProps> = ({ fileId }) => {
                 <strong>FPS</strong>
               </TableCell>
               <TableCell align="center">
-                {comparison.original?.metadata?.video?.fps || '분석 중...'}
+                {comparison.comparison.original?.metadata?.video?.fps || '분석 중...'}
               </TableCell>
               <TableCell align="center">
-                {comparison.enhanced?.metadata?.video?.fps || '분석 중...'}
+                {comparison.comparison.enhanced?.metadata?.video?.fps || '분석 중...'}
               </TableCell>
             </TableRow>
             <TableRow>
@@ -389,10 +389,10 @@ const MetadataComparison: React.FC<MetadataComparisonProps> = ({ fileId }) => {
                 <strong>코덱</strong>
               </TableCell>
               <TableCell align="center">
-                {comparison.original?.metadata?.video?.codec || '분석 중...'}
+                {comparison.comparison.original?.metadata?.video?.codec || '분석 중...'}
               </TableCell>
               <TableCell align="center">
-                {comparison.enhanced?.metadata?.video?.codec || '분석 중...'}
+                {comparison.comparison.enhanced?.metadata?.video?.codec || '분석 중...'}
               </TableCell>
             </TableRow>
             <TableRow>
@@ -400,10 +400,10 @@ const MetadataComparison: React.FC<MetadataComparisonProps> = ({ fileId }) => {
                 <strong>재생 시간</strong>
               </TableCell>
               <TableCell align="center">
-                {comparison.original?.metadata?.format?.duration ? formatDuration(comparison.original.metadata.format.duration) : '분석 중...'}
+                {comparison.comparison.original?.metadata?.format?.duration ? formatDuration(comparison.comparison.original.metadata.format.duration) : '분석 중...'}
               </TableCell>
               <TableCell align="center">
-                {comparison.enhanced?.metadata?.format?.duration ? formatDuration(comparison.enhanced.metadata.format.duration) : '분석 중...'}
+                {comparison.comparison.enhanced?.metadata?.format?.duration ? formatDuration(comparison.comparison.enhanced.metadata.format.duration) : '분석 중...'}
               </TableCell>
             </TableRow>
           </TableBody>

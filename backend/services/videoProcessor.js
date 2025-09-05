@@ -197,19 +197,63 @@ const processVideo = (inputPath, options = {}) => {
       // FFmpeg 실행
       await new Promise((resolve, reject) => {
         let stderrOutput = [];
+        let progressData = {
+          percent: 0,
+          timemark: '00:00:00',
+          fps: 0,
+          q: 0,
+          size: 0,
+          time: 0,
+          bitrate: 0,
+          speed: 0
+        };
+        
+        // 진행률 파일 경로
+        const progressFilePath = path.join(__dirname, '../temp', `${outputFileName}.progress`);
         
         const command = ffmpeg(inputPath)
           .outputOptions(outputOptions)
           .output(outputPath)
           .on('start', (commandLine) => {
             console.log('FFmpeg 명령어:', commandLine);
+            // 진행률 파일 초기화
+            fs.writeFileSync(progressFilePath, JSON.stringify({ percent: 0, status: 'started' }));
           })
           .on('progress', (progress) => {
+            progressData = progress;
+            
+            // 진행률 계산 (더 정확하게)
+            let percent = 0;
             if (progress.percent) {
-              console.log(`진행률: ${Math.round(progress.percent)}% 완료`);
+              percent = Math.round(progress.percent);
+            } else if (progress.timemark && inputMetadata.duration > 0) {
+              // 시간 기반 진행률 계산
+              const timeParts = progress.timemark.split(':');
+              const currentTime = parseInt(timeParts[0]) * 3600 + parseInt(timeParts[1]) * 60 + parseFloat(timeParts[2]);
+              percent = Math.round((currentTime / inputMetadata.duration) * 100);
             }
-            if (progress.timemark) {
-              console.log(`처리 시간: ${progress.timemark}`);
+            
+            // 진행률을 0-100 범위로 제한
+            percent = Math.max(0, Math.min(100, percent));
+            
+            if (percent > 0) {
+              console.log(`진행률: ${percent}% 완료 (${progress.timemark})`);
+              
+              // 진행률 정보를 파일에 저장
+              const progressInfo = {
+                percent: percent,
+                timemark: progress.timemark,
+                fps: progress.fps,
+                speed: progress.speed,
+                status: 'processing',
+                timestamp: new Date().toISOString()
+              };
+              
+              try {
+                fs.writeFileSync(progressFilePath, JSON.stringify(progressInfo));
+              } catch (writeError) {
+                console.warn('진행률 파일 쓰기 실패:', writeError.message);
+              }
             }
           })
           .on('stderr', (stderrLine) => {
@@ -217,21 +261,62 @@ const processVideo = (inputPath, options = {}) => {
             // 모든 stderr 출력 (디버깅용)
             console.log('FFmpeg stderr:', stderrLine);
           })
-                     .on('end', () => {
-             console.log('=== FFmpeg 완료 ===');
-             resolve();
-           })
+          .on('end', () => {
+            console.log('=== FFmpeg 완료 ===');
+            
+            // 완료 상태를 진행률 파일에 저장
+            try {
+              const finalProgress = {
+                percent: 100,
+                status: 'completed',
+                timestamp: new Date().toISOString()
+              };
+              fs.writeFileSync(progressFilePath, JSON.stringify(finalProgress));
+            } catch (writeError) {
+              console.warn('최종 진행률 파일 쓰기 실패:', writeError.message);
+            }
+            
+            resolve();
+          })
           .on('error', (err) => {
             console.error('=== FFmpeg 오류 ===');
             console.error('오류 메시지:', err.message);
             console.error('오류 스택:', err.stack);
             console.error('FFmpeg stderr 출력:', stderrOutput.join('\n'));
+            
+            // 오류 상태를 진행률 파일에 저장
+            try {
+              const errorProgress = {
+                percent: 0,
+                status: 'failed',
+                error: err.message,
+                timestamp: new Date().toISOString()
+              };
+              fs.writeFileSync(progressFilePath, JSON.stringify(errorProgress));
+            } catch (writeError) {
+              console.warn('오류 진행률 파일 쓰기 실패:', writeError.message);
+            }
+            
             reject(new Error(`비디오 처리 실패: ${err.message}`));
           });
 
         // 타임아웃 설정 (30분)
         const timeout = setTimeout(() => {
           command.kill('SIGKILL');
+          
+          // 타임아웃 상태를 진행률 파일에 저장
+          try {
+            const timeoutProgress = {
+              percent: 0,
+              status: 'timeout',
+              error: '비디오 처리 타임아웃 (30분 초과)',
+              timestamp: new Date().toISOString()
+            };
+            fs.writeFileSync(progressFilePath, JSON.stringify(timeoutProgress));
+          } catch (writeError) {
+            console.warn('타임아웃 진행률 파일 쓰기 실패:', writeError.message);
+          }
+          
           reject(new Error('비디오 처리 타임아웃 (30분 초과)'));
         }, 30 * 60 * 1000);
 

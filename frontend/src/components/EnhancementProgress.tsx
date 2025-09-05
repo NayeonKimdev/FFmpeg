@@ -44,6 +44,7 @@ const EnhancementProgress: React.FC<EnhancementProgressProps> = ({
   const [isPolling, setIsPolling] = useState(false);
   const intervalRef = useRef<NodeJS.Timeout | null>(null);
   const mountedRef = useRef(true);
+  const initializedRef = useRef(false); // 중복 초기화 방지
 
   // 컴포넌트 언마운트 시 정리
   useEffect(() => {
@@ -181,12 +182,10 @@ const EnhancementProgress: React.FC<EnhancementProgressProps> = ({
 
   // 초기 enhancement 시작 (한 번만)
   useEffect(() => {
-    let isInitialized = false;
+    if (initializedRef.current) return; // 중복 초기화 방지
+    initializedRef.current = true;
     
     const initializeEnhancement = async () => {
-      if (isInitialized) return;
-      isInitialized = true;
-      
       try {
         setMessage('화질 개선 요청을 보내는 중...');
         setProgress(5);
@@ -223,7 +222,7 @@ const EnhancementProgress: React.FC<EnhancementProgressProps> = ({
     };
     
     initializeEnhancement();
-  }, [fileId]); // fileId만 의존성으로
+  }, [fileId]); // checkStatusDebounced 제거하여 무한 루프 방지
 
   const handleCancel = () => {
     if (intervalRef.current) {

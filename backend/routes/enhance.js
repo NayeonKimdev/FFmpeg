@@ -8,9 +8,13 @@ const path = require('path');
 // 비디오 화질 개선 요청 (오류 처리 강화)
 router.post('/', async (req, res) => {
   try {
+    console.log('=== 화질 개선 요청 받음 ===');
+    console.log('요청 본문:', req.body);
+    
     const { fileId, enhancementOptions = {} } = req.body;
     
     if (!fileId) {
+      console.log('파일 ID가 없음');
       return res.status(400).json({ 
         error: '파일 ID가 필요합니다.',
         code: 'MISSING_FILE_ID'
@@ -18,8 +22,11 @@ router.post('/', async (req, res) => {
     }
 
     const inputPath = path.join(__dirname, '../uploads', fileId);
+    console.log('입력 파일 경로:', inputPath);
+    console.log('파일 존재 여부:', fs.existsSync(inputPath));
     
     if (!fs.existsSync(inputPath)) {
+      console.log('원본 파일을 찾을 수 없음:', fileId);
       return res.status(404).json({ 
         error: '원본 파일을 찾을 수 없습니다.',
         code: 'FILE_NOT_FOUND',
@@ -29,6 +36,7 @@ router.post('/', async (req, res) => {
 
     // 입력 파일 검증
     try {
+      console.log('입력 파일 검증 시작...');
       const inputMetadata = await extractMetadata(inputPath);
       console.log('=== 입력 파일 검증 완료 ===');
       console.log('파일명:', fileId);
@@ -76,6 +84,22 @@ router.post('/', async (req, res) => {
     });
 
     // 비동기로 비디오 처리 실행 (오류 처리 강화)
+    console.log('=== processVideo 함수 호출 시작 ===');
+    console.log('입력 경로:', inputPath);
+    console.log('옵션:', options);
+    
+    // 간단한 테스트를 위해 더미 파일 생성
+    const tempOutputPath = path.join(__dirname, '../processed', outputFileName);
+    console.log('출력 경로:', tempOutputPath);
+    
+    // 더미 파일 생성 (테스트용)
+    try {
+      fs.writeFileSync(tempOutputPath, 'dummy video content');
+      console.log('더미 파일 생성 완료');
+    } catch (writeError) {
+      console.error('더미 파일 생성 실패:', writeError.message);
+    }
+    
     processVideo(inputPath, options)
       .then(result => {
         console.log('=== 화질 개선 완료 ===');
@@ -98,6 +122,7 @@ router.post('/', async (req, res) => {
         console.error('=== 화질 개선 실패 ===');
         console.error('오류 메시지:', error.message);
         console.error('오류 스택:', error.stack);
+        console.error('오류 타입:', error.constructor.name);
         
         // 실패한 출력 파일 정리
         const failedOutputPath = path.join(__dirname, '../processed', outputFileName);
@@ -129,11 +154,26 @@ router.get('/status/:jobId', async (req, res) => {
   try {
     const { jobId } = req.params;
     const processedPath = path.join(__dirname, '../processed', jobId);
+    const progressFilePath = path.join(__dirname, '../temp', `${jobId}.progress`);
     
     console.log(`=== 상태 조회 ===`);
     console.log(`작업 ID: ${jobId}`);
     console.log(`파일 경로: ${processedPath}`);
+    console.log(`진행률 파일: ${progressFilePath}`);
     console.log(`파일 존재: ${fs.existsSync(processedPath)}`);
+    console.log(`진행률 파일 존재: ${fs.existsSync(progressFilePath)}`);
+    
+    // 진행률 파일에서 정보 읽기
+    let progressInfo = null;
+    if (fs.existsSync(progressFilePath)) {
+      try {
+        const progressData = fs.readFileSync(progressFilePath, 'utf8');
+        progressInfo = JSON.parse(progressData);
+        console.log('진행률 정보:', progressInfo);
+      } catch (readError) {
+        console.warn('진행률 파일 읽기 실패:', readError.message);
+      }
+    }
     
     if (fs.existsSync(processedPath)) {
       const stats = fs.statSync(processedPath);
@@ -144,13 +184,95 @@ router.get('/status/:jobId', async (req, res) => {
       const now = new Date();
       const timeSinceModified = now.getTime() - modifiedTime.getTime();
       
-      // 파일이 최근 5초 내에 수정되었으면 아직 처리 중
-      if (timeSinceModified < 5000) {
+      // 진행률 파일에서 완료 상태 확인
+      if (progressInfo && progressInfo.status === 'completed') {
+        console.log('진행률 파일에서 완료 상태 확인됨');
+        
+        // 파일 정보 반환
+        const fileInfo = {
+          name: path.basename(processedPath),
+          size: stats.size,
+          sizeFormatted: formatFileSize(stats.size),
+          created: stats.birthtime,
+          modified: stats.mtime,
+          path: processedPath
+        };
+        
+        console.log('파일 처리 완료:', fileInfo);
+        
+        // 메타데이터 정보도 포함
+        try {
+          const metadata = await extractMetadata(processedPath);
+          const analysis = await analyzeVideoDetails(processedPath);
+          
+          res.json({
+            status: 'completed',
+            progress: 100,
+            file: fileInfo,
+            metadata: {
+              format: metadata.format,
+              video: metadata.video,
+              audio: metadata.audio
+            },
+            analysis: {
+              syncIssues: analysis.syncIssues,
+              quality: {
+                resolution: analysis.video?.resolution,
+                fps: analysis.video?.fps?.calculated,
+                bitrate: analysis.video?.bitrate
+              }
+            }
+          });
+        } catch (metadataError) {
+          console.warn('메타데이터 추출 실패:', metadataError.message);
+          res.json({
+            status: 'completed',
+            progress: 100,
+            file: fileInfo
+          });
+        }
+        return;
+      }
+      
+      // 진행률 파일에서 실패 상태 확인
+      if (progressInfo && progressInfo.status === 'failed') {
+        console.log('진행률 파일에서 실패 상태 확인됨');
+        res.json({
+          status: 'failed',
+          progress: 0,
+          message: '비디오 처리에 실패했습니다.',
+          error: progressInfo.error || '알 수 없는 오류가 발생했습니다.'
+        });
+        return;
+      }
+      
+      // 파일이 최근 10초 내에 수정되었으면 아직 처리 중
+      if (timeSinceModified < 10000) {
         console.log('파일이 아직 처리 중입니다 (최근 수정됨)');
+        
+        // 진행률 파일에서 진행률 가져오기
+        let estimatedProgress = 85;
+        if (progressInfo && progressInfo.percent) {
+          estimatedProgress = progressInfo.percent;
+        } else {
+          // 파일 크기를 기반으로 진행률 추정
+          if (fileSize > 1024 * 1024) { // 1MB 이상
+            estimatedProgress = 95;
+          } else if (fileSize > 1024 * 512) { // 512KB 이상
+            estimatedProgress = 90;
+          } else if (fileSize > 1024 * 100) { // 100KB 이상
+            estimatedProgress = 80;
+          } else if (fileSize > 1024 * 10) { // 10KB 이상
+            estimatedProgress = 70;
+          } else {
+            estimatedProgress = 60;
+          }
+        }
+        
         res.json({
           status: 'processing',
-          progress: 90, // 90%로 설정
-          message: '비디오 처리를 완료하는 중입니다...',
+          progress: estimatedProgress,
+          message: progressInfo?.timemark ? `비디오 처리를 완료하는 중입니다... (${progressInfo.timemark})` : '비디오 처리를 완료하는 중입니다...',
           lastModified: modifiedTime
         });
         return;
@@ -225,10 +347,35 @@ router.get('/status/:jobId', async (req, res) => {
       }
     } else {
       console.log('파일이 아직 생성되지 않았습니다.');
+      
+      // 진행률 파일에서 정보 확인
+      let estimatedProgress = 15;
+      let message = '비디오 처리를 시작하는 중입니다...';
+      
+      if (progressInfo) {
+        if (progressInfo.status === 'started') {
+          estimatedProgress = 20;
+          message = 'FFmpeg 처리를 시작하는 중입니다...';
+        } else if (progressInfo.percent) {
+          estimatedProgress = progressInfo.percent;
+          message = `비디오를 처리하고 있습니다... (${progressInfo.timemark || ''})`;
+        }
+      } else {
+        // 입력 파일 존재 여부 확인하여 진행률 추정
+        const inputFileName = jobId.replace('_enhanced.mp4', '');
+        const inputPath = path.join(__dirname, '../uploads', inputFileName);
+        
+        if (fs.existsSync(inputPath)) {
+          // 입력 파일이 존재하면 처리 중으로 간주
+          estimatedProgress = 25;
+          message = '비디오를 분석하고 있습니다...';
+        }
+      }
+      
       res.json({
         status: 'processing',
-        progress: 15, // 초기 진행률
-        message: '비디오 처리를 시작하는 중입니다...',
+        progress: estimatedProgress,
+        message: message,
         estimatedTime: '5-15분'
       });
     }

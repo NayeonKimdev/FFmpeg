@@ -58,11 +58,15 @@ function App() {
 
   const handleEnhancementComplete = (result: any) => {
     try {
+      console.log('=== handleEnhancementComplete 호출됨 ===');
+      console.log('결과:', result);
       setEnhancedFile(result);
       setEnhancementCompleted(true);
       setActiveStep(2); // 메타데이터 비교 단계로 이동
       setError(null);
+      console.log('상태 업데이트 완료 - activeStep: 2');
     } catch (err: any) {
+      console.error('화질 개선 완료 처리 중 오류:', err);
       setError(typeof err === 'string' ? err : '화질 개선 완료 처리 중 오류가 발생했습니다.');
     }
   };

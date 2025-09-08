@@ -6,7 +6,7 @@ const rateLimit = require('express-rate-limit');
 
 // 라우트 임포트
 const uploadRoutes = require('./routes/upload');
-const enhanceRoutes = require('./routes/enhance');
+const enhanceRoutes = require('./routes/enhance'); // 완전한 버전 사용
 const metadataRoutes = require('./routes/metadata');
 const downloadRoutes = require('./routes/download');
 const analyzeRoutes = require('./routes/analyze');
@@ -85,10 +85,13 @@ app.use((req, res) => {
   res.status(404).json({ error: '요청한 리소스를 찾을 수 없습니다.' });
 });
 
-// 파일 정리 함수
+// 파일 정리 함수 (15분 이상 된 파일만 삭제)
 const cleanupExpiredFiles = () => {
   try {
     console.log('파일 정리 시작...');
+    const now = Date.now();
+    const maxAge = 15 * 60 * 1000; // 15분 (밀리초)
+    let deletedCount = 0;
     
     // uploads 디렉토리 정리
     const uploadsDir = path.join(__dirname, 'uploads');
@@ -97,10 +100,16 @@ const cleanupExpiredFiles = () => {
       for (const file of uploadFiles) {
         const filePath = path.join(uploadsDir, file);
         try {
-          fs.unlinkSync(filePath);
-          console.log(`업로드 파일 삭제: ${file}`);
+          const stats = fs.statSync(filePath);
+          const fileAge = now - stats.mtime.getTime();
+          
+          if (fileAge > maxAge) {
+            fs.unlinkSync(filePath);
+            console.log(`업로드 파일 삭제: ${file} (${Math.round(fileAge / 60000)}분 전)`);
+            deletedCount++;
+          }
         } catch (error) {
-          console.error(`업로드 파일 삭제 실패: ${file}`, error);
+          console.error(`업로드 파일 처리 실패: ${file}`, error);
         }
       }
     }
@@ -112,24 +121,53 @@ const cleanupExpiredFiles = () => {
       for (const file of processedFiles) {
         const filePath = path.join(processedDir, file);
         try {
-          fs.unlinkSync(filePath);
-          console.log(`처리된 파일 삭제: ${file}`);
+          const stats = fs.statSync(filePath);
+          const fileAge = now - stats.mtime.getTime();
+          
+          if (fileAge > maxAge) {
+            fs.unlinkSync(filePath);
+            console.log(`처리된 파일 삭제: ${file} (${Math.round(fileAge / 60000)}분 전)`);
+            deletedCount++;
+          }
         } catch (error) {
-          console.error(`처리된 파일 삭제 실패: ${file}`, error);
+          console.error(`처리된 파일 처리 실패: ${file}`, error);
         }
       }
     }
     
-    console.log('파일 정리 완료');
+    // temp 디렉토리 정리 (진행률 파일)
+    const tempDir = path.join(__dirname, 'temp');
+    if (fs.existsSync(tempDir)) {
+      const tempFiles = fs.readdirSync(tempDir);
+      for (const file of tempFiles) {
+        const filePath = path.join(tempDir, file);
+        try {
+          const stats = fs.statSync(filePath);
+          const fileAge = now - stats.mtime.getTime();
+          
+          if (fileAge > maxAge) {
+            fs.unlinkSync(filePath);
+            console.log(`임시 파일 삭제: ${file} (${Math.round(fileAge / 60000)}분 전)`);
+            deletedCount++;
+          }
+        } catch (error) {
+          console.error(`임시 파일 처리 실패: ${file}`, error);
+        }
+      }
+    }
+    
+    console.log(`파일 정리 완료: ${deletedCount}개 파일 삭제됨`);
   } catch (error) {
     console.error('파일 정리 실패:', error);
   }
 };
 
-// 파일 정리 스케줄러 (1시간마다 실행)
+// 파일 정리 스케줄러 활성화 (15분마다 실행)
 setInterval(() => {
+  console.log('=== 자동 파일 정리 시작 ===');
   cleanupExpiredFiles();
-}, 60 * 60 * 1000);
+  console.log('=== 자동 파일 정리 완료 ===');
+}, 15 * 60 * 1000); // 15분 = 15 * 60 * 1000ms
 
 // 서버 시작
 app.listen(PORT, async () => {
@@ -145,14 +183,14 @@ app.listen(PORT, async () => {
     }
   });
   
-  // 서버 시작 시 모든 파일 삭제 (새로고침 시 파일 정리)
-  try {
-    console.log('서버 시작 시 모든 파일 삭제 시작...');
-    cleanupExpiredFiles();
-    console.log('서버 시작 시 모든 파일 삭제 완료');
-  } catch (error) {
-    console.error('서버 시작 시 파일 삭제 실패:', error);
-  }
+  // 서버 시작 시 파일 정리 비활성화 (개발 중 파일 보존)
+  // try {
+  //   console.log('서버 시작 시 모든 파일 삭제 시작...');
+  //   cleanupExpiredFiles();
+  //   console.log('서버 시작 시 모든 파일 삭제 완료');
+  // } catch (error) {
+  //   console.error('서버 시작 시 파일 삭제 실패:', error);
+  // }
 });
 
 module.exports = app;

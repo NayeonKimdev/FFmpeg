@@ -8,30 +8,11 @@ import {
   CircularProgress
 } from '@mui/material';
 import { Download } from '@mui/icons-material';
-import { compareMetadata, downloadFile, analyzeVideo } from '../services/api';
+import { compareMetadata, downloadFile, analyzeVideo, ComparisonData } from '../services/api';
 import VideoPlayer from './VideoPlayer';
 
 interface MetadataComparisonProps {
   fileId: string;
-}
-
-interface ComparisonData {
-  original: {
-    metadata: any;
-    fileInfo: any;
-  };
-  enhanced: {
-    metadata: any;
-    fileInfo: any;
-  };
-  comparison: {
-    fileSizeChange: string;
-    resolutionChange: string;
-    bitrateChange: string;
-    fpsChange: string;
-    codecChange: string;
-    durationChange: string;
-  };
 }
 
 const MetadataComparison: React.FC<MetadataComparisonProps> = ({ fileId }) => {
@@ -67,15 +48,11 @@ const MetadataComparison: React.FC<MetadataComparisonProps> = ({ fileId }) => {
         
         const data = await compareMetadata(fileId);
         
-        if (!mountedRef.current) return;
-        
-        console.log('메타데이터 비교 결과 수신');
+        console.log('메타데이터 비교 결과 수신:', data);
         setComparison(data);
         setError(null);
       } catch (err: any) {
         console.error('메타데이터 비교 오류:', err);
-        
-        if (!mountedRef.current) return;
         
         // 429 에러인 경우 특별 처리
         if (err.response?.status === 429) {
@@ -83,21 +60,17 @@ const MetadataComparison: React.FC<MetadataComparisonProps> = ({ fileId }) => {
           
           // 10초 후 재시도
           setTimeout(() => {
-            if (mountedRef.current) {
-              hasLoaded = false;
-              setIsLoadingComparison(false);
-              loadComparison();
-            }
+            hasLoaded = false;
+            setIsLoadingComparison(false);
+            loadComparison();
           }, 10000);
           return;
         }
         
         setError(typeof err === 'string' ? err : '메타데이터 비교 실패');
       } finally {
-        if (mountedRef.current) {
-          setLoading(false);
-          setIsLoadingComparison(false);
-        }
+        setLoading(false);
+        setIsLoadingComparison(false);
       }
     };
 
@@ -228,7 +201,7 @@ const MetadataComparison: React.FC<MetadataComparisonProps> = ({ fileId }) => {
             원본 비디오
           </Typography>
           <VideoPlayer
-            src={`/api/download/stream/${fileId}?type=original`}
+            src={`http://localhost:5000/uploads/${comparison?.comparison?.original?.fileInfo?.name || fileId}`}
             type="original"
             onError={handleVideoError}
           />
@@ -248,7 +221,7 @@ const MetadataComparison: React.FC<MetadataComparisonProps> = ({ fileId }) => {
             개선된 비디오
           </Typography>
           <VideoPlayer
-            src={`/api/download/stream/${fileId}?type=enhanced`}
+            src={`http://localhost:5000/processed/${comparison?.comparison?.enhanced?.fileInfo?.name || fileId.replace('.MP4', '_enhanced.mp4')}`}
             type="enhanced"
             onError={handleVideoError}
           />
@@ -276,7 +249,9 @@ const MetadataComparison: React.FC<MetadataComparisonProps> = ({ fileId }) => {
               파일 크기
             </Typography>
             <Typography variant="body1">
-              {comparison.comparison.fileSizeChange}
+              {comparison?.comparison?.original?.fileInfo?.sizeFormatted && comparison?.comparison?.enhanced?.fileInfo?.sizeFormatted ? 
+                `${comparison.comparison.original.fileInfo.sizeFormatted} → ${comparison.comparison.enhanced.fileInfo.sizeFormatted}` : 
+                '데이터 없음'}
             </Typography>
           </Box>
           <Box sx={{ flex: 1 }}>
@@ -284,7 +259,9 @@ const MetadataComparison: React.FC<MetadataComparisonProps> = ({ fileId }) => {
               해상도
             </Typography>
             <Typography variant="body1">
-              {comparison.comparison.resolutionChange}
+              {comparison?.comparison?.original?.metadata?.video?.resolution && comparison?.comparison?.enhanced?.metadata?.video?.resolution ? 
+                `${comparison.comparison.original.metadata.video.resolution} → ${comparison.comparison.enhanced.metadata.video.resolution}` : 
+                '데이터 없음'}
             </Typography>
           </Box>
           <Box sx={{ flex: 1 }}>
@@ -292,7 +269,9 @@ const MetadataComparison: React.FC<MetadataComparisonProps> = ({ fileId }) => {
               비트레이트
             </Typography>
             <Typography variant="body1">
-              {comparison.comparison.bitrateChange}
+              {comparison?.comparison?.original?.metadata?.video?.bitrate && comparison?.comparison?.enhanced?.metadata?.video?.bitrate ? 
+                `${Math.round(comparison.comparison.original.metadata.video.bitrate / 1000)}k → ${Math.round(comparison.comparison.enhanced.metadata.video.bitrate / 1000)}k` : 
+                '데이터 없음'}
             </Typography>
           </Box>
           <Box sx={{ flex: 1 }}>
@@ -300,7 +279,9 @@ const MetadataComparison: React.FC<MetadataComparisonProps> = ({ fileId }) => {
               FPS
             </Typography>
             <Typography variant="body1">
-              {comparison.comparison.fpsChange}
+              {comparison?.comparison?.original?.metadata?.video?.fps && comparison?.comparison?.enhanced?.metadata?.video?.fps ? 
+                `${comparison.comparison.original.metadata.video.fps} → ${comparison.comparison.enhanced.metadata.video.fps}` : 
+                '데이터 없음'}
             </Typography>
           </Box>
           <Box sx={{ flex: 1 }}>
@@ -308,7 +289,9 @@ const MetadataComparison: React.FC<MetadataComparisonProps> = ({ fileId }) => {
               코덱
             </Typography>
             <Typography variant="body1">
-              {comparison.comparison.codecChange}
+              {comparison?.comparison?.original?.metadata?.audio?.codec && comparison?.comparison?.enhanced?.metadata?.audio?.codec ? 
+                `${comparison.comparison.original.metadata.audio.codec} (${comparison.comparison.original.metadata.audio.channels}ch) → ${comparison.comparison.enhanced.metadata.audio.codec} (${comparison.comparison.enhanced.metadata.audio.channels}ch)` : 
+                '데이터 없음'}
             </Typography>
           </Box>
           <Box sx={{ flex: 1 }}>
@@ -316,7 +299,9 @@ const MetadataComparison: React.FC<MetadataComparisonProps> = ({ fileId }) => {
               재생 시간
             </Typography>
             <Typography variant="body1">
-              {comparison.comparison.durationChange}
+              {comparison?.comparison?.original?.metadata?.format?.duration && comparison?.comparison?.enhanced?.metadata?.format?.duration ? 
+                `${formatDuration(comparison.comparison.original.metadata.format.duration)} → ${formatDuration(comparison.comparison.enhanced.metadata.format.duration)}` : 
+                '데이터 없음'}
             </Typography>
           </Box>
         </Box>
@@ -353,20 +338,55 @@ const MetadataComparison: React.FC<MetadataComparisonProps> = ({ fileId }) => {
           </Box>
         )}
 
-        {analysis && (
+        {comparison && (
           <Box>
             <Typography variant="subtitle1" gutterBottom>
-              분석 결과
+              동기화 분석 결과
             </Typography>
-            <pre style={{ 
-              backgroundColor: '#f5f5f5', 
-              padding: '1rem', 
-              borderRadius: '4px',
-              overflow: 'auto',
-              fontSize: '0.875rem'
-            }}>
-              {JSON.stringify(analysis, null, 2)}
-            </pre>
+            
+            <Box sx={{ mb: 2 }}>
+              <Typography variant="subtitle2" color="text.secondary">
+                원본 비디오 동기화 상태
+              </Typography>
+              <Typography variant="body1">
+                {comparison?.comparison?.original?.analysis?.syncIssues?.hasSyncProblem ? 
+                  '❌ 동기화 문제 있음' : 
+                  '✅ 동기화 정상'}
+              </Typography>
+              {comparison?.comparison?.original?.analysis?.syncIssues?.durationDiff && (
+                <Typography variant="body2" color="text.secondary">
+                  오디오-비디오 시간 차이: {comparison.comparison.original.analysis.syncIssues.durationDiff}초
+                </Typography>
+              )}
+            </Box>
+            
+            <Box sx={{ mb: 2 }}>
+              <Typography variant="subtitle2" color="text.secondary">
+                개선된 비디오 동기화 상태
+              </Typography>
+              <Typography variant="body1">
+                {comparison?.comparison?.enhanced?.analysis?.syncIssues?.hasSyncProblem ? 
+                  '❌ 동기화 문제 있음' : 
+                  '✅ 동기화 정상'}
+              </Typography>
+              {comparison?.comparison?.enhanced?.analysis?.syncIssues?.durationDiff && (
+                <Typography variant="body2" color="text.secondary">
+                  오디오-비디오 시간 차이: {comparison.comparison.enhanced.analysis.syncIssues.durationDiff}초
+                </Typography>
+              )}
+            </Box>
+            
+            <Box sx={{ mb: 2 }}>
+              <Typography variant="subtitle2" color="text.secondary">
+                프레임레이트 분석
+              </Typography>
+              <Typography variant="body1">
+                원본: {comparison?.comparison?.original?.metadata?.video?.fps} FPS
+              </Typography>
+              <Typography variant="body1">
+                개선: {comparison?.comparison?.enhanced?.metadata?.video?.fps} FPS
+              </Typography>
+            </Box>
           </Box>
         )}
       </Paper>

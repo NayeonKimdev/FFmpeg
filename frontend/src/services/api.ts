@@ -240,21 +240,112 @@ export interface VideoAnalysis {
 }
 
 export interface ComparisonData {
+  comparison: {
   original: {
-    metadata: Metadata;
-    fileInfo: any;
+      metadata: {
+        format: {
+          duration: string;
+          size: number;
+          bitrate: number;
+        };
+        video: {
+          codec: string;
+          resolution: string;
+          fps: number;
+          bitrate: number;
+        };
+        audio: {
+          codec: string;
+          sampleRate: number;
+          channels: number;
+          bitrate: number;
+        };
+      };
+      analysis: {
+        syncIssues: {
+          durationDiff: number;
+          hasSyncProblem: boolean;
+          details: any[];
+        };
+      };
+      fileInfo: {
+        name: string;
+        size: number;
+        sizeFormatted: string;
+      };
   };
   enhanced: {
-    metadata: Metadata;
-    fileInfo: any;
+      metadata: {
+        format: {
+          duration: string;
+          size: number;
+          bitrate: number;
+        };
+        video: {
+          codec: string;
+          resolution: string;
+          fps: number;
+          bitrate: number;
+        };
+        audio: {
+          codec: string;
+          sampleRate: number;
+          channels: number;
+          bitrate: number;
+        };
+      };
+      analysis: {
+        syncIssues: {
+          durationDiff: number;
+          hasSyncProblem: boolean;
+          details: any[];
+        };
+      };
+      fileInfo: {
+        name: string;
+        size: number;
+        sizeFormatted: string;
+      };
+    };
   };
-  comparison: {
-    fileSizeChange: string;
-    resolutionChange: string;
-    bitrateChange: string;
-    fpsChange: string;
-    codecChange: string;
-    durationChange: string;
+  improvements: {
+    fileSize: {
+      original: number;
+      enhanced: number;
+      change: number;
+      percentage: string;
+    };
+    resolution: {
+      original: string;
+      enhanced: string;
+      improved: boolean;
+    };
+    fps: {
+      original: number;
+      enhanced: number;
+      improved: boolean;
+    };
+    bitrate: {
+      original: string;
+      enhanced: string;
+    };
+    audio: {
+      original: string;
+      enhanced: string;
+      improved: boolean;
+    };
+    syncIssues: {
+      original: {
+        durationDiff: number;
+        hasSyncProblem: boolean;
+        details: any[];
+      };
+      enhanced: {
+        durationDiff: number;
+        hasSyncProblem: boolean;
+        details: any[];
+      };
+    };
   };
 }
 

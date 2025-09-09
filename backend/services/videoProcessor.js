@@ -120,22 +120,13 @@ const processVideo = (inputPath, options = {}) => {
         codec = 'h264'
       } = options;
 
-      // 해상도 자동 선택 로직
+      // 해상도 자동 선택 로직 (원본 해상도 완전 유지, 화질 중심 개선)
       let targetWidth, targetHeight;
       
       if (resolution === 'auto') {
-        // 원본보다 낮지 않게, 하지만 합리적인 범위로
-        if (inputMetadata.originalWidth >= 1920) {
-          targetWidth = 1920;
-          targetHeight = 1080;
-        } else if (inputMetadata.originalWidth >= 1280) {
-          targetWidth = 1280;
-          targetHeight = 720;
-        } else {
-          // 원본 해상도 유지하되 짝수로 맞춤
-          targetWidth = Math.floor(inputMetadata.originalWidth / 2) * 2;
-          targetHeight = Math.floor(inputMetadata.originalHeight / 2) * 2;
-        }
+        // 원본 해상도 완전 유지 (화질 개선에만 집중)
+        targetWidth = inputMetadata.originalWidth;
+        targetHeight = inputMetadata.originalHeight;
       } else {
         // 수동 해상도 설정
         switch (resolution) {
@@ -196,45 +187,74 @@ const processVideo = (inputPath, options = {}) => {
 
       updateProgress(5, 'FFmpeg 초기화 중...');
 
-      // FFmpeg 명령 구성 (단순하고 안정적으로)
+      // 해상도에 따른 비트레이트 설정
+      let videoBitrate, maxBitrate, bufferSize;
+      
+      if (targetWidth <= 640) {
+        // 480p 이하: 2-3Mbps
+        videoBitrate = '2500k';
+        maxBitrate = '3000k';
+        bufferSize = '6000k';
+      } else if (targetWidth <= 1280) {
+        // 720p: 4-5Mbps
+        videoBitrate = '4000k';
+        maxBitrate = '5000k';
+        bufferSize = '10000k';
+      } else if (targetWidth <= 1920) {
+        // 1080p: 6-8Mbps
+        videoBitrate = '6000k';
+        maxBitrate = '8000k';
+        bufferSize = '16000k';
+      } else {
+        // 4K 이상: 10-12Mbps
+        videoBitrate = '10000k';
+        maxBitrate = '12000k';
+        bufferSize = '24000k';
+      }
+
+      console.log(`=== 비트레이트 설정 ===`);
+      console.log(`해상도: ${targetWidth}x${targetHeight}`);
+      console.log(`비트레이트: ${videoBitrate}`);
+      console.log(`최대 비트레이트: ${maxBitrate}`);
+      console.log(`버퍼 크기: ${bufferSize}`);
+
+      // FFmpeg 명령 구성 (명시적 고비트레이트 설정)
       const videoOptions = [
-        `-c:v ${codec}`,
-        `-crf ${crfValue}`,
-        `-preset medium`, // fast에서 medium으로 변경 (품질 향상)
-        `-pix_fmt yuv420p`,
-        `-profile:v main`, // baseline에서 main으로 변경
-        `-level 4.0`, // 3.0에서 4.0으로 변경 (더 나은 호환성)
+        `-c:v libx264`, // 명시적으로 libx264 사용
+        `-b:v ${videoBitrate}`, // 해상도별 최적 비트레이트
+        `-maxrate ${maxBitrate}`, // 최대 비트레이트
+        `-bufsize ${bufferSize}`, // 버퍼 크기
+        `-preset slow`, // 최고 품질을 위한 느린 프리셋
+        `-pix_fmt yuv420p`, // 웹 호환 픽셀 포맷
+        `-profile:v high`, // 고품질 프로필
+        `-level 4.0`, // 높은 레벨로 더 나은 압축
         `-r ${targetFPS}`,
-        `-vf scale=${targetWidth}:${targetHeight}:flags=lanczos`,
-        `-movflags +faststart`,
-        `-avoid_negative_ts make_zero`,
-        `-vsync cfr`
+        `-vf scale=${targetWidth}:${targetHeight}:flags=lanczos`, // 고품질 스케일링
+        `-movflags +faststart`, // 웹 스트리밍 최적화
+        `-bf 2`, // B-프레임 증가로 압축 효율 향상
+        `-refs 3`, // 참조 프레임 증가로 품질 향상
+        `-me_method umh`, // 고급 모션 추정
+        `-subq 7`, // 서브픽셀 정밀도 최대화
+        `-trellis 1`, // 트렐리스 양자화로 품질 향상
+        `-aq-mode 2` // 적응형 양자화로 디테일 보존
       ];
 
-      // 오디오 옵션 (더 안전하게)
+      // 오디오 옵션 (초고품질 오디오)
       let audioOptions = [];
       
       if (!inputMetadata.hasAudio) {
         audioOptions.push('-an');
         console.log('오디오 처리: 오디오 스트림 없음');
       } else {
-        // 오디오가 있는 경우 원본 오디오를 최대한 보존
-        const audioStream = inputMetadata.audioStream;
-        
-        if (audioStream.codec_name === 'aac') {
-          // 이미 AAC라면 복사
-          audioOptions = ['-c:a copy'];
-          console.log('오디오 처리: AAC 코덱 복사');
-        } else {
-          // 다른 코덱이면 AAC로 변환 (품질 보존)
-          audioOptions = [
-            '-c:a aac',
-            '-b:a 128k', // 64k에서 128k로 증가 (품질 향상)
-            '-ar 44100',
-            '-ac 2'
-          ];
-          console.log(`오디오 처리: ${audioStream.codec_name} -> AAC 변환`);
-        }
+        // 초고품질 오디오 설정
+        audioOptions = [
+          '-c:a aac',
+          '-b:a 320k', // 최고 비트레이트로 품질 극대화
+          '-ar 48000', // 높은 샘플레이트
+          '-ac 2', // 스테레오
+          '-aac_coder twoloop' // 고품질 AAC 인코더
+        ];
+        console.log('오디오 처리: 초고품질 AAC (320k, 48kHz, 스테레오)');
       }
 
       // 전체 옵션 결합
@@ -306,6 +326,32 @@ const processVideo = (inputPath, options = {}) => {
           try {
             console.log('FFmpeg 처리 완료');
             updateProgress(95, '후처리 중...');
+            
+            // 파일 생성 완료 대기 (최대 5초)
+            let retryCount = 0;
+            const maxRetries = 50; // 5초 대기 (100ms * 50)
+            
+            while (retryCount < maxRetries) {
+              if (fs.existsSync(outputPath)) {
+                const stats = fs.statSync(outputPath);
+                // 파일이 최근 1초 내에 수정되지 않았으면 완료로 간주
+                const now = Date.now();
+                const modifiedTime = stats.mtime.getTime();
+                const timeSinceModified = now - modifiedTime;
+                
+                if (timeSinceModified > 1000 && stats.size > 1024) {
+                  console.log('파일 생성 완료 확인됨');
+                  break;
+                }
+              }
+              
+              await new Promise(resolve => setTimeout(resolve, 100));
+              retryCount++;
+            }
+            
+            if (retryCount >= maxRetries) {
+              throw new Error('파일 생성 완료 확인 시간 초과');
+            }
             
             // 출력 파일 검증
             if (!fs.existsSync(outputPath)) {
@@ -397,13 +443,13 @@ const processVideo = (inputPath, options = {}) => {
           reject(new Error(`비디오 처리 실패: ${err.message}`));
         });
 
-      // 타임아웃 설정 (10분)
+      // 타임아웃 설정 (20분 - 고품질 처리를 위해 시간 증가)
       const timeout = setTimeout(() => {
         console.log('FFmpeg 타임아웃');
         ffmpegCommand.kill('SIGKILL');
         updateProgress(0, '처리 시간 초과', 'timeout');
-        reject(new Error('비디오 처리 타임아웃 (10분 초과)'));
-      }, 10 * 60 * 1000);
+        reject(new Error('비디오 처리 타임아웃 (20분 초과)'));
+      }, 20 * 60 * 1000);
 
       ffmpegCommand.on('end', () => clearTimeout(timeout));
       ffmpegCommand.on('error', () => clearTimeout(timeout));

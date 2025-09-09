@@ -250,7 +250,7 @@ router.get('/compare/:fileId', async (req, res) => {
       }
     }
     
-    // 개선 효과 분석 (강화)
+    // 개선 효과 분석 (오류 처리 강화)
     let improvements = null;
     if (comparison.original?.metadata && comparison.enhanced?.metadata) {
       try {
@@ -259,12 +259,32 @@ router.get('/compare/:fileId', async (req, res) => {
         const original = comparison.original.metadata;
         const enhanced = comparison.enhanced.metadata;
         
+        // 안전한 값 추출 함수들
+        const safeParseInt = (value) => {
+          try {
+            return parseInt(value) || 0;
+          } catch {
+            return 0;
+          }
+        };
+        
+        const safeParseFloat = (value) => {
+          try {
+            return parseFloat(value) || 0;
+          } catch {
+            return 0;
+          }
+        };
+        
+        const originalSize = comparison.original.fileInfo?.size || 0;
+        const enhancedSize = comparison.enhanced.fileInfo?.size || 0;
+        
         improvements = {
           fileSize: {
-            original: comparison.original.fileInfo.size,
-            enhanced: comparison.enhanced.fileInfo.size,
-            change: comparison.enhanced.fileInfo.size - comparison.original.fileInfo.size,
-            percentage: ((comparison.enhanced.fileInfo.size - comparison.original.fileInfo.size) / comparison.original.fileInfo.size * 100).toFixed(2)
+            original: originalSize,
+            enhanced: enhancedSize,
+            change: enhancedSize - originalSize,
+            percentage: originalSize > 0 ? ((enhancedSize - originalSize) / originalSize * 100).toFixed(2) : '0.00'
           },
           resolution: {
             original: original.video?.resolution || 'unknown',
@@ -272,17 +292,17 @@ router.get('/compare/:fileId', async (req, res) => {
             improved: enhanced.video?.resolution !== original.video?.resolution
           },
           fps: {
-            original: original.video?.fps || 0,
-            enhanced: enhanced.video?.fps || 0,
-            improved: enhanced.video?.fps > original.video?.fps
+            original: safeParseFloat(original.video?.fps) || 0,
+            enhanced: safeParseFloat(enhanced.video?.fps) || 0,
+            improved: safeParseFloat(enhanced.video?.fps) > safeParseFloat(original.video?.fps)
           },
           bitrate: {
-            original: original.video?.bitrate ? `${Math.round(Number(original.video.bitrate) / 1000)}k` : 'unknown',
-            enhanced: enhanced.video?.bitrate ? `${Math.round(Number(enhanced.video.bitrate) / 1000)}k` : 'unknown'
+            original: original.video?.bitrate ? `${Math.round(safeParseInt(original.video.bitrate) / 1000)}k` : 'unknown',
+            enhanced: enhanced.video?.bitrate ? `${Math.round(safeParseInt(enhanced.video.bitrate) / 1000)}k` : 'unknown'
           },
           audio: {
-            original: original.audio ? `${original.audio.codec} (${original.audio.channels}ch)` : '없음',
-            enhanced: enhanced.audio ? `${enhanced.audio.codec} (${enhanced.audio.channels}ch)` : '없음',
+            original: original.audio ? `${original.audio.codec || 'unknown'} (${original.audio.channels || 0}ch)` : '없음',
+            enhanced: enhanced.audio ? `${enhanced.audio.codec || 'unknown'} (${enhanced.audio.channels || 0}ch)` : '없음',
             improved: enhanced.audio?.codec === 'aac' // AAC는 더 나은 호환성
           },
           syncIssues: {
@@ -297,14 +317,30 @@ router.get('/compare/:fileId', async (req, res) => {
         console.error('개선 효과 분석 실패:', improvementError.message);
         improvements = {
           error: '개선 효과 분석 중 오류가 발생했습니다.',
-          details: improvementError.message
+          details: improvementError.message,
+          fallback: true
         };
       }
     } else {
       console.log('개선 효과 분석 불가:', {
         hasOriginal: !!comparison.original?.metadata,
-        hasEnhanced: !!comparison.enhanced?.metadata
+        hasEnhanced: !!comparison.enhanced?.metadata,
+        originalExists: originalExists,
+        enhancedExists: enhancedExists
       });
+      
+      // 최소한의 개선 정보라도 제공
+      if (originalExists && enhancedExists) {
+        improvements = {
+          fileSize: {
+            original: comparison.original?.fileInfo?.size || 0,
+            enhanced: comparison.enhanced?.fileInfo?.size || 0,
+            change: (comparison.enhanced?.fileInfo?.size || 0) - (comparison.original?.fileInfo?.size || 0),
+            percentage: '0.00'
+          },
+          note: '메타데이터 추출 실패로 인한 기본 정보만 제공됩니다.'
+        };
+      }
     }
     
     console.log('=== 메타데이터 비교 완료 ===');

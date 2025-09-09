@@ -78,7 +78,7 @@ router.post('/', async (req, res) => {
       message: '비디오 화질 개선이 시작되었습니다.',
       jobId: outputFileName,
       options: options,
-      estimatedTime: '3-10분'
+      estimatedTime: '5-20분 (고품질 처리)'
     });
 
     // 비동기로 비디오 처리 실행
@@ -250,8 +250,8 @@ router.get('/status/:jobId', async (req, res) => {
       const now = new Date();
       const timeSinceModified = now.getTime() - modifiedTime.getTime();
       
-      // 파일이 충분히 크면 완료로 간주 (1MB 이상)
-      if (fileSize > 1024 * 1024) {
+      // 파일이 충분히 크고 최근 1초 내에 수정되지 않았으면 완료로 간주
+      if (fileSize > 1024 * 1024 && timeSinceModified > 1000) {
         console.log('파일이 충분히 커서 완료로 간주 (크기:', Math.round(fileSize / 1024 / 1024), 'MB)');
         
         const fileInfo = {
@@ -299,8 +299,8 @@ router.get('/status/:jobId', async (req, res) => {
         return;
       }
       
-      // 파일이 최근 5초 내에 수정되었으면 아직 처리 중
-      if (timeSinceModified < 5000) {
+      // 파일이 최근 3초 내에 수정되었으면 아직 처리 중
+      if (timeSinceModified < 3000) {
         console.log('파일이 아직 처리 중입니다 (최근 수정됨)');
         
         let estimatedProgress = 85;
@@ -439,7 +439,7 @@ router.get('/status/:jobId', async (req, res) => {
         status: 'processing',
         progress: estimatedProgress,
         message: message,
-        estimatedTime: '3-10분',
+        estimatedTime: '5-20분 (고품질 처리)',
         file: pendingFileInfo
       });
     }

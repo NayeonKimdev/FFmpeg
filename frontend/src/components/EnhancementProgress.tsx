@@ -130,8 +130,8 @@ const EnhancementProgress: React.FC<EnhancementProgressProps> = ({
       console.log('진행률:', statusResult.progress);
       console.log('파일:', statusResult.file);
       
-      // 완료 상태 감지 (더 엄격하게)
-      if (statusResult.status === 'completed' && statusResult.file) {
+      // 완료 상태 감지 (더 관대하게)
+      if (statusResult.status === 'completed') {
         console.log('=== 완료 상태 감지됨 ===');
         console.log('완료된 파일:', statusResult.file);
         console.log('파일 크기:', statusResult.file.size);
@@ -263,8 +263,8 @@ const EnhancementProgress: React.FC<EnhancementProgressProps> = ({
         
         console.log('enhanceVideo API 호출 시작...');
         const result = await enhanceVideo(fileId, {
-          resolution: '1080p',
-          quality: 'high'
+          resolution: 'auto', // 원본 해상도 유지
+          quality: 'high'     // 화질만 높임
         });
         
         console.log('enhanceVideo API 응답:', result);
